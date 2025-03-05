@@ -1,0 +1,9 @@
+lib
+lib64
+include
+share
+bin
+dist
+build
+.vscode
+__pycache__
