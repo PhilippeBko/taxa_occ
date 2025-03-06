@@ -1,13 +1,12 @@
-
 import sys
-from PyQt5 import QtWidgets
-from PyQt5.QtCore import QThread, pyqtSignal
 import json
 import requests
 import time
 import re
 import commons
 
+from PyQt5 import QtWidgets
+from PyQt5.QtCore import QThread, pyqtSignal
 from bs4 import BeautifulSoup
 #from datetime import datetime
 #from taxa_model import PNTaxa
@@ -849,6 +848,10 @@ class API_TROPICOS(API_Abstract):
 
 
  ###-TESTS-##################
+
+
+
+
 
 def test_signal(base,api_json):
     

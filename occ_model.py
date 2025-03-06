@@ -1627,12 +1627,6 @@ class PN_occ_tables(QTableView):
     #     return
 
  
-
-
-
-
-
-
 class PN_taxa_resolution_model(QtCore.QAbstractTableModel):
     header_labels = ['Name', 'Reference Name']
     def __init__(self, data = None):
@@ -1751,7 +1745,7 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def __init__(self):
         super().__init__()
-        from class_synonyms import PNSynonym
+        from taxa_model import PNSynonym
         self.table = QtWidgets.QTableView()
         data = [
            PNSynonym(123,'Miconia', 'Miconia DC.'),

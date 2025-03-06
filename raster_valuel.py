@@ -6,78 +6,89 @@ from PyQt5 import QtSql, QtWidgets
 gdal.UseExceptions()
 
 
-
+#resize raster_path with the canevas of reference_raster_path
+# do not alter value and resolution of raster_path
 def extend_raster_to_match_reference(raster_path, reference_raster_path, output_raster_path):
     # Ouvre les rasters
     raster = gdal.Open(raster_path, gdalconst.GA_ReadOnly)
     reference_raster = gdal.Open(reference_raster_path, gdalconst.GA_ReadOnly)
 
-    # Récupère la géotransformation et la projection du raster d'origine
+    # Récupère les géotransformations et projections
     geo_transform = raster.GetGeoTransform()
-    projection = raster.GetProjection()
-    pixel_size_x = geo_transform[1]  # Taille du pixel en X
-    pixel_size_y = geo_transform[5]  # Taille du pixel en Y (négatif en général)
+    ref_geo_transform = reference_raster.GetGeoTransform()
+    projection = raster.GetProjection()  # On garde la projection du raster source
 
-    # Récupère les dimensions des rasters
+    pixel_size_x = geo_transform[1]  # Taille du pixel (on garde celle du raster source)
+    pixel_size_y = geo_transform[5]  # Taille du pixel (on garde celle du raster source)
+
+    # Dimensions du raster source
     cols_raster = raster.RasterXSize
     rows_raster = raster.RasterYSize
+
+    # Dimensions du raster de référence
     cols_ref = reference_raster.RasterXSize
     rows_ref = reference_raster.RasterYSize
 
-    # Vérifie si un redimensionnement est nécessaire
-    if cols_raster >= cols_ref and rows_raster >= rows_ref:
-        print("Le raster est déjà plus grand ou égal à la taille de référence.")
-        return
+    # Coordonnées géographiques
+    x_min_raster = geo_transform[0]
+    y_max_raster = geo_transform[3]
+    x_max_raster = x_min_raster + cols_raster * pixel_size_x
+    y_min_raster = y_max_raster + rows_raster * pixel_size_y
 
-    # Nouvelle transformation géographique basée sur l'extension1e+30
-    new_geo_transform = (
-        geo_transform[0],  # Origine X (inchangée)
-        pixel_size_x,      # Taille du pixel en X
-        geo_transform[2],  # Rotation X (souvent 0)
-        geo_transform[3],  # Origine Y (inchangée)
-        geo_transform[4],  # Rotation Y (souvent 0)
-        pixel_size_y       # Taille du pixel en Y
-    )
+    x_min_ref = ref_geo_transform[0]
+    y_max_ref = ref_geo_transform[3]
+    x_max_ref = x_min_ref + cols_ref * ref_geo_transform[1]
+    y_min_ref = y_max_ref + rows_ref * ref_geo_transform[5]
+
+    # Nouvelle origine alignée sur le raster de référence
+    new_x_min = min(x_min_raster, x_min_ref)
+    new_y_max = max(y_max_raster, y_max_ref)
+    
+    # Nouvelle taille en pixels en conservant la résolution du raster source
+    new_cols = int((max(x_max_raster, x_max_ref) - new_x_min) / pixel_size_x)
+    new_rows = int((new_y_max - min(y_min_raster, y_min_ref)) / abs(pixel_size_y))
 
     # Crée un raster vide avec la nouvelle taille
     driver = gdal.GetDriverByName('GTiff')
-    out_raster = driver.Create(output_raster_path, cols_ref, rows_ref, 1, gdal.GDT_Float32)
-    out_raster.SetGeoTransform(new_geo_transform)
+    out_raster = driver.Create(output_raster_path, new_cols, new_rows, 1, gdal.GDT_Float32)
+    out_raster.SetGeoTransform((new_x_min, pixel_size_x, 0, new_y_max, 0, pixel_size_y))
     out_raster.SetProjection(projection)
 
-    # Définit une valeur NoData propre
-    no_data_value = 0  
+    # Définit une valeur NoData
+    no_data_value = -9999  
     band = out_raster.GetRasterBand(1)
     band.SetNoDataValue(no_data_value)
 
-    # Initialise tout le raster avec 0
-    data = np.full((rows_ref, cols_ref), no_data_value, dtype=np.float32)
+    # Initialise tout le raster avec NoData
+    data = np.full((new_rows, new_cols), no_data_value, dtype=np.float32)
 
-    # Lit les données du raster d'origine
+    # Lit les données du raster source
     raster_band = raster.GetRasterBand(1)
     raster_data = raster_band.ReadAsArray()
 
     # Vérifie si une valeur NoData est définie dans l'original
     original_no_data = raster_band.GetNoDataValue()
     if original_no_data is not None:
-        # Remplace les valeurs NoData de l'original par 0
         raster_data[raster_data == original_no_data] = no_data_value
 
-    # Insère les données de l'ancien raster dans le raster étendu
-    data[:rows_raster, :cols_raster] = raster_data
+    # Convertit les coordonnées du raster source en indices de pixels dans la nouvelle grille
+    start_x = int((x_min_raster - new_x_min) / pixel_size_x)
+    start_y = int((new_y_max - y_max_raster) / abs(pixel_size_y))
 
-    # Vérifie et remplace les valeurs aberrantes (cas où GDAL met sa propre valeur NoData)
-    #data[data < 0] = no_data_value  # On corrige les valeurs extrêmes
-    data[~np.isfinite(data)] = no_data_value  # Remplace NaN, inf, -inf par 0
-    data[data < 0] = no_data_value  # Corrige les valeurs NoData extrêmes de GDAL
+    # Insère le raster source dans le raster étendu
+    data[start_y:start_y+rows_raster, start_x:start_x+cols_raster] = raster_data
 
     # Écrit les données dans le raster de sortie
     band.WriteArray(data)
     band.FlushCache()
-    print(f"Extension réussie : {output_raster_path}")
 
-#extend_raster_to_match_reference ('/home/birnbaum/Documents/Calédonie/Carto/analyse/richesse/SSDM-Richness2/ssdm_prob_range_20000m.tif', '/home/birnbaum/Documents/Calédonie/Carto/MNT/strm90/mnt_srtm90_wgs84.tif', '/home/birnbaum/Téléchargements/tmp_richness_reference.tif')
+    print(f"Raster étendu avec succès : {output_raster_path}")
 
+""" 
+extend_raster_to_match_reference ('/home/birnbaum/Documents/Calédonie/Carto/analyse/richesse/SSDM-Richness2/ssdm_prob_range_20000m.tif',
+                                   '/home/birnbaum/Documents/Calédonie/Carto/MNT/MNT_10m/mnt_10_wgs84.tif', 
+                                   '/home/birnbaum/Téléchargements/tmp_richness_reference.tif')
+ """
 
 
 
@@ -140,9 +151,8 @@ def shapefile_to_raster(shapefile_path, output_raster_path, reference_raster_pat
     # Assure-toi que tout est bien écrit dans le fichier
     output_raster.FlushCache()
     print(f"Transformation Shapefile vers Raster réussie : {output_raster_path}")
-    resize_raster_to_reference(output_raster_path, reference_raster_path, output_raster_path)
-# shapefile_to_raster("/home/birnbaum/Téléchargements/forest_3k.shp", "/home/birnbaum/Téléchargements/forest_3k.tif", "/home/birnbaum/Téléchargements/tmp_richness_reference.tif", "gid")
-# shapefile_to_raster("/home/birnbaum/Téléchargements/peridotites_wgs84.shp", "/home/birnbaum/Téléchargements/peridotites_wgs84.tif", "/home/birnbaum/Téléchargements/tmp_richness_reference.tif", "gid")
+#shapefile_to_raster("/home/birnbaum/Téléchargements/forest_3k.shp", "/home/birnbaum/Téléchargements/forest_3k.tif", "/home/birnbaum/Téléchargements/tmp_richness_reference.tif", "gid")
+#shapefile_to_raster("/home/birnbaum/Téléchargements/peridotites_wgs84.shp", "/home/birnbaum/Téléchargements/peridotites_wgs84.tif", "/home/birnbaum/Téléchargements/tmp_richness_reference.tif", "gid")
 
 def align_and_resample_rasters(raster_paths, output_path, raster_ref, integer=True, compression="DEFLATE"):
     # Ouvre le raster de référence pour obtenir les informations de projection et de géotransformation
@@ -215,8 +225,8 @@ raster_files = {
     }
 output_file = "/home/birnbaum/Documents/Calédonie/Carto/raster_fusion_wgs84.tif"
 align_and_resample_rasters(raster_files, output_file, "richness")
-"""
- 
+
+""" 
 
 
 #RasterLoader is a class for loading and processing raster data from a given file path. 
@@ -373,11 +383,14 @@ def set_value_todabase2(niamoto_table):
     while query.next():
         points.append(query.value(0))  # Récupérer les coordonnées géographiques sous forme de POINT(lon lat)
     values_raster = raster_loader.get_value([(float(pt.split()[0].replace('POINT(', '')), float(pt.split()[1].replace(')', ''))) for pt in points])
+    raster_loader.get_value([(165.1116333, -21.13367271), (165.00839233, -20.85251427)])
     
+    print (raster_loader.get_value([(165.1116333, -21.13367271), (165.00839233, -20.85251427)]))
     i = 0
     row_count = len (values_raster)
     start_time = time.time()
     for points in values_raster:
+        
         i +=1
         lon = points["longitude"]
         lat = points["latitude"]

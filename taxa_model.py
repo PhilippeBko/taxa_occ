@@ -18,6 +18,9 @@ class PNTaxa(object):
         self.published = published
         self.api_score = 0
         self.parent_name = None
+        self.dict_species = commons.get_dict_from_species(self.taxaname)
+        if self.dict_species is None:
+            self.dict_species = {}
 
     @property
     def idtaxonref(self):
@@ -79,15 +82,15 @@ class PNTaxa(object):
     def isautonym (self):
         if self.id_rank not in [22,23]:
             return False
-        dict_name = commons.get_dict_from_species (self.taxaname)
-        return dict_name["autonym"]
+        #dict_name = commons.get_dict_from_species (self.taxaname)
+        return self.dict_species.get ("autonym", None) #return self.dict_species["autonym"]
 
     @property
     def basename (self):
         if self.id_rank < 21:
             return self.taxaname.lower()
-        dict_name = commons.get_dict_from_species (self.taxaname)
-        return dict_name["basename"]
+        #dict_name = commons.get_dict_from_species (self.taxaname)
+        return self.dict_species.get ("basename", None) #self.dict_species["basename"]
 
     @property
     def simple_taxaname (self):
@@ -95,8 +98,8 @@ class PNTaxa(object):
         if self.id_rank < 21:
             #_tabname = self.taxaname.split () #_tabname[0:1]
             return self.taxaname
-        dict_name = commons.get_dict_from_species (self.taxaname)
-        return dict_name["name"]
+        #dict_name = commons.get_dict_from_species (self.taxaname)
+        return self.dict_species.get ("name", None) #return self.dict_species["name"]
 
 
     # @propertyy
@@ -266,10 +269,6 @@ class PN_edit_synonym (QtWidgets.QWidget):
         QtWidgets.QMessageBox.critical(self.ui_addname, "Database error", msg, QtWidgets.QMessageBox.Ok)
         return False
 
-
-
-
-
 #class to generate a model (QAbstractTableModel) for QtableView widget to display taxa (PNTaxa) with red/green dot according to api_score (PNTaxa)
 class TableModel(QtCore.QAbstractTableModel):
     header_labels = ['Taxa Name', 'Authors', 'Rank'] #, 'ID Taxon']
@@ -393,7 +392,6 @@ class TableModel(QtCore.QAbstractTableModel):
         self.beginInsertRows(QtCore.QModelIndex(), self.rowCount(), self.rowCount())
         self.PNTaxon.append(clrowtable)
         self.endInsertRows()
-
         
 #class to display a search widget composed of a search text and and treeview result with  matched taxa and score
 class PN_taxa_search_widget(QWidget):
@@ -626,8 +624,7 @@ class PN_taxa_hierarchical_widget(QTreeView):
         except Exception:
             return
 
-
-
+#class to add a taxon
 class PN_add_taxaname(QtWidgets.QMainWindow):
     apply_signal  = pyqtSignal(object)
     def __init__(self, myPNTaxa): # move toward a same id_rank if merge
