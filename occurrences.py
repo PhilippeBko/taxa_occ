@@ -74,7 +74,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window = uic.loadUi("pn_occurrences.ui")
         self.suggested_id_taxonref = 0
         self.suggested_name_taxon_ref  = None
-
+    #setting the widget Qtreeview_Json
+        header = ['Category', 'Taxa', 'Occurrences']
+        self.PN_trview_traits = Qtreeview_Json (True, True, header)
+        layout = self.window.tview_properties_layout.layout()
+        layout.addWidget(self.PN_trview_traits)
 
     # #setting the tableView_resolution
         self.tblView_resolution = self.window.tableView_resolution
@@ -187,7 +191,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window.cb_figure_rank.currentIndexChanged.connect(self.trview_explore_traits_fill)
         self.window.cb_figure_function.currentIndexChanged.connect(self.trview_explore_traits_fill)
         self.window.cb_figure_taxa.currentIndexChanged.connect(self.trview_explore_traits_fill)
-        self.window.trView_properties.clicked.connect(self.trview_explore_traits_fill)
+        self.PN_trview_traits.clicked.connect(self.trview_explore_traits_fill)
         self.window.tblview_traits_dataset.clicked.connect(self.tblview_traits_dataset_clicked)
         self.window.tblview_user_dataset.clicked.connect(self.tblview_user_dataset_clicked)
         self.window.tblview_user_dataset.keyPressEvent = lambda event: self.tblview_user_dataset_keyPress(event.key()) if event.key() in [Qt.Key_F2, Qt.Key_Delete] else None
@@ -318,7 +322,7 @@ class MainWindow(QtWidgets.QMainWindow):
     #fill the trview_explore list by taxa
         try:
             _rankname = self.window.cb_figure_rank.currentText().lower()
-            model = self.window.trView_properties.model()
+            model = self.PN_trview_traits.model()
             root_item = model.invisibleRootItem()
         except Exception:
             return
@@ -346,7 +350,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         _function = self.window.cb_figure_function.currentText().lower()
         _sql_traits = self.myPlotClass.get_sql_traits(_rankname, _function, alltaxas)
-        #set the result to PN_tlview_traits
+        #set the result to PN_trview_traits
         model = QtGui.QStandardItemModel()
         self.tblView_explore.setModel(model)
         query = QtSql.QSqlQuery (_sql_traits)
@@ -380,7 +384,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 for row in range(item.rowCount()):
                     child_item = item.child(row)
                     recursively_deselect(child_item)
-        model = self.window.trView_properties.model()
+        model = self.PN_trview_traits.model()
         root_item = model.invisibleRootItem()
         recursively_deselect(root_item)
         self.trview_explore_traits_fill()
@@ -859,15 +863,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cb_figures_fill()
 
     #load the taxa traits with density (Lists in Rows)
-        PN_tlview_traits = Qtreeview_Json (self.window.trView_properties, True, True)
         _data = self.myPlotClass.get_taxa_properties()
-        tab_header = ['Category', 'Species', 'Occurrences']
-        PN_tlview_traits.setData(_data)
-        model = self.window.trView_properties.model()
-        model.setHorizontalHeaderLabels(tab_header)
-        #self.window.trView_properties.resizeColumnToContents(0)
-        #self.window.trView_properties.header().setSectionResizeMode(0,QHeaderView.Stretch)
-        self.window.trView_properties.header().setDefaultAlignment(Qt.AlignCenter)   
+        self.PN_trview_traits.setData(_data)
     #load the list of taxa/traits
         self.trview_explore_traits_fill()
         return
@@ -1455,8 +1452,8 @@ if __name__ == '__main__':
 #         taxa = ''
 #     self.myPlotClass.searchtaxa = taxa
 #     if self.window.cb_figures.currentIndex() == 0:
-#         PN_tlview_traits = PN_taxa_identity (self.window.result_self.trView_occ)
-#         PN_tlview_traits.setData(self.myPlotClass.get_traits_occurrences())
+#         PN_trview_traits = PN_taxa_identity (self.window.result_self.trView_occ)
+#         PN_trview_traits.setData(self.myPlotClass.get_traits_occurrences())
 #         tab_header = ['Category', 'Species', 'Occurrences']
 #         model = self.window.result_self.trView_occ.model()
 #         model.setHorizontalHeaderLabels(tab_header)

@@ -1,6 +1,6 @@
 import re
 import json
-from PyQt5 import  QtSql, QtWidgets
+from PyQt5 import  QtSql
 from datetime import datetime
 #synonyms for database value
 dict_strata = {
@@ -115,62 +115,6 @@ flower_reg_pattern = r'fl\.*|bt\.*|boutons?|cauliflor(e|a|ous)?|fert(?:ile|\.|)|
 fruit_reg_pattern = r'fr\.*|figues?|fruits?|c[ôo]nes?|graines?|seeds?'
 
 
-#common widget to set in a layout the database connection setting
-#red if not connecter (dbopen=False), grren if connected(dbopen=True and self.db is not None)
-class PN_database_widget(QtWidgets.QWidget):
-    """
-    A custom widget for displaying the status of a database connection.
-
-    The widget consists of a status indicator (a red or green circle) and a label indicating the connection status.
-    The database connection is established using parameters stored in a `config.ini` configuration file.
-
-    Attributes:
-        dbopen (bool): Indicates whether the database connection is open.
-        statusIndicator (QtWidgets.QWidget): The connection status indicator.
-        statusConnection (QtWidgets.QLabel): The label indicating the connection status.
-
-    Methods:
-        open(): Opens the database connection using the parameters from the configuration file.
-    """
-    # ... (the class code remains unchanged):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.dbopen = False
-        frame = QtWidgets.QFrame(self)
-        frame.setStyleSheet("background-color: transparent;")
-        self.statusIndicator = QtWidgets.QWidget(frame)
-        self.statusIndicator.setFixedSize(10, 10)
-        self.statusIndicator.setStyleSheet("background-color: rgb(255, 0, 0); border-radius: 5px;")
-        self.statusConnection = QtWidgets.QLabel(None, frame)
-        self.statusConnection.setText("Not Connected")
-        self.statusConnection.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        frame_layout = QtWidgets.QHBoxLayout(frame)
-        frame_layout.setContentsMargins(5, 5, 5, 5)
-        frame_layout.addWidget(self.statusIndicator)
-        frame_layout.addWidget(self.statusConnection)
-        self.setLayout(frame_layout)
-    
-    def open(self):
-        import configparser
-        config = configparser.ConfigParser()
-        file_config = config.read('config.ini')
-        section = 'database'
-        if file_config and section in config.sections():
-            self.db = QtSql.QSqlDatabase.addDatabase("QPSQL")
-            self.db.setHostName(config['database']['host'])
-            self.db.setUserName(config['database']['user'])
-            self.db.setPassword(config['database']['password'])
-            self.db.setDatabaseName(config['database']['database'])
-            if self.db.open():
-                self.dbopen = True
-                default_db_name = QtSql.QSqlDatabase.database().databaseName()
-                if default_db_name:
-                    self.statusIndicator.setStyleSheet("background-color: rgb(0, 255, 0); border-radius: 5px;")
-                    self.statusConnection.setText("Connected : "+ default_db_name)
-            else:
-                self.db.close()
-
-
 def get_column_type(_type):
     #convert types in a standard postgresql format
     if _type in ['boolean', 'integer', 'numeric', 'text', 'date']:
@@ -214,19 +158,6 @@ def get_reference_field(fieldname):
     for key, value in list_db_fields.items():
         if fieldname in value.get("synonyms", '[]'):
             return key
-
-#return any field value from the table taxonomy.taxa_reference    
-# def get_taxa_reference_value(id_taxonref, fieldname):
-#     """ 
-#         get a field value from the table taxonomy.taxa_reference according to a id_taxonref
-#     """
-#     if fieldname == 'taxonref':
-#         fieldname = 'CONCAT_WS (' ',taxaname, authors) AS taxonref'
-#     sql_txt = "SELECT " + fieldname + " FROM taxonomy.taxa_reference"
-#     sql_txt += "\nWHERE id_taxonref = " + str(id_taxonref)
-#     query = QtSql.QSqlQuery(sql_txt)
-#     query.next()
-#     return query.value(fieldname)
 
 def get_str_value (value):
     """     

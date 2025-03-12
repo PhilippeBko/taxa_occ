@@ -471,7 +471,7 @@ min-width: 80px;
            <enum>QTabWidget::South</enum>
           </property>
           <property name="currentIndex">
-           <number>1</number>
+           <number>3</number>
           </property>
           <widget class="QWidget" name="tab_import">
            <attribute name="title">
@@ -1396,6 +1396,59 @@ color: rgb(239, 239, 239);</string>
                 <property name="bottomMargin">
                  <number>3</number>
                 </property>
+                <item row="5" column="0">
+                 <layout class="QHBoxLayout" name="horizontalLayout_7">
+                  <item>
+                   <widget class="QPushButton" name="button_taxa_categories">
+                    <property name="font">
+                     <font>
+                      <pointsize>9</pointsize>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Satisfy All Categories</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="button_taxa_clear">
+                    <property name="font">
+                     <font>
+                      <pointsize>9</pointsize>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Clear</string>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </item>
+                <item row="0" column="0">
+                 <widget class="QComboBox" name="cb_figure_taxa">
+                  <property name="font">
+                   <font>
+                    <pointsize>9</pointsize>
+                   </font>
+                  </property>
+                  <item>
+                   <property name="text">
+                    <string>Taxa with occurrences</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Any taxa</string>
+                   </property>
+                  </item>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <layout class="QVBoxLayout" name="tview_properties_layout"/>
+                </item>
                 <item row="1" column="0">
                  <layout class="QHBoxLayout" name="horizontalLayout_9">
                   <item>
@@ -1474,71 +1527,6 @@ color: rgb(239, 239, 239);</string>
                    </widget>
                   </item>
                  </layout>
-                </item>
-                <item row="0" column="0">
-                 <widget class="QComboBox" name="cb_figure_taxa">
-                  <property name="font">
-                   <font>
-                    <pointsize>9</pointsize>
-                   </font>
-                  </property>
-                  <item>
-                   <property name="text">
-                    <string>Taxa with occurrences</string>
-                   </property>
-                  </item>
-                  <item>
-                   <property name="text">
-                    <string>Any taxa</string>
-                   </property>
-                  </item>
-                 </widget>
-                </item>
-                <item row="6" column="0">
-                 <layout class="QHBoxLayout" name="horizontalLayout_7">
-                  <item>
-                   <widget class="QPushButton" name="button_taxa_categories">
-                    <property name="font">
-                     <font>
-                      <pointsize>9</pointsize>
-                     </font>
-                    </property>
-                    <property name="text">
-                     <string>Satisfy All Categories</string>
-                    </property>
-                    <property name="checkable">
-                     <bool>true</bool>
-                    </property>
-                   </widget>
-                  </item>
-                  <item>
-                   <widget class="QPushButton" name="button_taxa_clear">
-                    <property name="font">
-                     <font>
-                      <pointsize>9</pointsize>
-                     </font>
-                    </property>
-                    <property name="text">
-                     <string>Clear</string>
-                    </property>
-                   </widget>
-                  </item>
-                 </layout>
-                </item>
-                <item row="5" column="0">
-                 <widget class="QTreeView" name="trView_properties">
-                  <property name="sizePolicy">
-                   <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-                    <horstretch>0</horstretch>
-                    <verstretch>0</verstretch>
-                   </sizepolicy>
-                  </property>
-                  <property name="font">
-                   <font>
-                    <pointsize>8</pointsize>
-                   </font>
-                  </property>
-                 </widget>
                 </item>
                </layout>
               </widget>

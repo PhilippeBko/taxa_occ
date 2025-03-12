@@ -3,51 +3,33 @@ import sys
 import copy
 import re
 import json
+import os
+import csv
 
 import math as mt
 import pandas as pd
 from PyQt5 import QtSql, QtGui,  uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt
-from class_properties import Qtreeview_Json
+
 from occ_model import PN_taxa_resolution_model
-from taxa_model import PN_taxa_search_widget,PNSynonym
-from commons import (get_str_value, get_all_names, get_reference_field, list_db_fields, 
-                     flower_reg_pattern, fruit_reg_pattern, 
-                     PN_database_widget)
+from taxa_model import PNSynonym
+
+from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaSearch
+from core.functions import (get_str_value, get_all_names, get_reference_field, list_db_fields, 
+                     flower_reg_pattern, fruit_reg_pattern
+                     )
 #from class_synonyms import PNSynonym
 
+#default parameters
+PLOT_DEFAULT_DECIMAL = 2
+DBASE_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss.zzz t"
+DBASE_SCHEMA = 'plots'
+DBASE_SCHEMA_TAXONOMY = 'taxonomy'
+DBASE_SCHEMA_TREES = DBASE_SCHEMA + '.trees'
+DBASE_SCHEMA_PLOTS = DBASE_SCHEMA + '.plots'
 
-
-#structure of the trees/plots tables
-#synonyms for database value
-dict_strata = {
-    "understorey": [1, "sous-bois", "sotobosque", "understory"], 
-    "sub-canopy": [2, "sous-canopée", "sub-cubierta"], 
-    "canopy": [3, "canopée", "cubierta"], 
-    "emergent": [4, "émergent","emergente"]
-}
-dict_month = {
-    1: ["enero","january","janvier", "janv.", "jan.", "ene."], 
-    2: ["febrero","february", "février", "feb.", "fev.", "fév."], 
-    3: ["marzo", "march", "mars"],
-    4: ["abril", "april", "avril"], 
-    5: ["mayo", "may", "mai"], 
-    6: ["junio", "june", "juin"],
-    7: ["julio", "july", "juillet"], 
-    8: ["agosto", "august", "août", "aug.", "ago."], 
-    9: ["septiembre", "september", "septembre", "sept.", "sep"],
-    10: ["octubre", "october", "octobre", "oct."], 
-    11: ["noviembre", "november", "novembre", "nov."], 
-    12: ["diciembre", "december", "décembre", "déc.", "dec.", "dic."]
-}
-#list of terms for combobox (text with items)
-list_typeplot = ["Circle", "Point", "Rectangle"]
-# list_month = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-# list_strata = ["", "Understorey", "Sub-canopy", "Canopy", "Emergent"]
-
-#structure of both tables plots and trees
-# structure is a dictionnary composed of a list of field_name with properties as:
-#field_name :{value, type, items, unit, decimal, min, max, editable, enabled, tip, details, synonyms}
+#structure of the trees/plots tables, based on list_db_fields
+#field_name :{value, type, items, translate, unit, decimal, min, max, editable, enabled, tip, details, synonyms}
 dict_db_plot = {
                 "id_plot": {"value" : None, "type" : 'integer', 'enabled': False},
                 "collection": {"value" : None, "type" : 'text', "editable" : True},
@@ -56,12 +38,11 @@ dict_db_plot = {
                 "longitude":list_db_fields["longitude"],
                 "latitude":list_db_fields["latitude"],
                 "altitude":list_db_fields["altitude"],
-                "type": {"value" : None, "type" : 'text', "items" : list_typeplot},
+                "type": {"value" : None, "type" : 'text', "items" : ["Circle", "Point", "Rectangle"]},
                 "width": {"value" : None, "type" : 'numeric'},
                 "radius": {"value" : None, "type" : 'numeric', "visible": False},
                 "length": {"value" : None, "type" : 'numeric'},
-                "area" : {"value": None, "enabled": False, "visible": True}
-                
+                "area" : {"value": None, "enabled": False, "visible": True}             
                 }
 
 dict_db_tree = {
@@ -88,30 +69,12 @@ dict_db_tree = {
                 "time_updated": {"value" : None, "type" : 'date', 'enabled': False},
                 "history": {"value" : None, "type" : 'integer', 'enabled': False, 'visible': False}
                 }
+# add perimeter synonyms to dbh synonyms list
 dbh_perimeter_synonyms = ["perimeter", "perim.", "périmètre", "périm.", "perimetro", "circumference", 
                       "circonférence", "circonf", "circ.", "girth", "circunferencia", "circ"]
-# dict_db_tree["strata"]["items"] = list_strata
-# dict_db_tree["month"]["items"] = list_month
 dict_db_tree["dbh"]["synonyms"] += dbh_perimeter_synonyms
-
+#create a composite dictionnary
 dict_db_ncpippn = dict_db_plot | dict_db_tree
-#default parameters
-PLOT_DEFAULT_DECIMAL = 2
-DBASE_DATETIME_FORMAT = "yyyy-MM-dd hh:mm:ss.zzz t"
-DBASE_SCHEMA = 'plots'
-DBASE_SCHEMA_TAXONOMY = 'taxonomy'
-DBASE_SCHEMA_TREES = DBASE_SCHEMA + '.trees'
-DBASE_SCHEMA_PLOTS = DBASE_SCHEMA + '.plots'
-
-#TODO : Uniformize db_definition between plots, commons and pn_occurrences
-
-#add synonyms definition from commons (if field exists !)
-# for field_name, field_def in dict_db_ncpippn.items():
-#     field_db = get_reference_field(field_name)
-#     if field_db:
-#         synonyms = list_db_fields[field_db].get("synonyms",'[]')
-#         #elif fieldname in value.get("synonyms", '[]'):
-#         field_def["synonyms"] = synonyms
 
 
 def get_typed_value(field_name, field_value, for_sql = False):
@@ -190,7 +153,6 @@ def database_execute_query(sql_query):
 class HighlightColumnDelegate(QtWidgets.QStyledItemDelegate):
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
-        #if index.column() == self.column_value:
         painter.save()
         brush = QtGui.QBrush(QtGui.QColor(128, 128, 128, 50))
         painter.fillRect(option.rect, brush)
@@ -209,7 +171,7 @@ class CSVImporter(QtWidgets.QDialog):
         self.dict_identifier_toUpdate = {}
         self.rows_imported = 0
         # load the GUI
-        self.column_value = 2
+        #self.column_value = 2
         self.dict_items = {}
         # if not table_def:
         #     table_def = copy.deepcopy(dict_db_ncpippn)
@@ -231,14 +193,9 @@ class CSVImporter(QtWidgets.QDialog):
         self.window.buttonbox_import.button(QtWidgets.QDialogButtonBox.Ok).clicked.connect(self.validate)
         self.window.buttonbox_import.button(QtWidgets.QDialogButtonBox.Cancel).clicked.connect(self.close)
         self.window.tblview_columns.clicked.connect(self.tblview_columns_clicked)
-        
-
-        # selection_model = self.window.tblview_columns.selectionModel()
-        # selection_model.selectionChanged.connect(self.tblview_columns_clicked)
-
-
+        # set the delegate for columns coloring
         delegate = HighlightColumnDelegate()
-        self.window.tblview_columns.setItemDelegateForColumn(self.column_value+1, delegate)
+        self.window.tblview_columns.setItemDelegateForColumn(3, delegate)
         self.window.tblview_columns.setItemDelegateForColumn(0, delegate)
 
     def tblview_columns_clicked(self):
@@ -304,7 +261,8 @@ class CSVImporter(QtWidgets.QDialog):
         #     return False
 
         #main function to load a csv file, or to open fileBowser
-        import os
+        #import os 
+        #import csv
         if not isinstance(filename, str):
             filename = None
         try:
@@ -321,8 +279,7 @@ class CSVImporter(QtWidgets.QDialog):
             file_dialog.setDefaultSuffix("csv")
             filename, file_type = file_dialog.getOpenFileName(None, "Import a CSV File", "", "CSV Files (*.csv);;All files (*)", options=options)
             if not filename: 
-                return 
-        import csv
+                return
         with open(filename, 'r', encoding='utf-8') as file:
             # Lire une portion du fichier pour l'analyse
             sample = file.readline()
@@ -750,7 +707,8 @@ class CSVImporter(QtWidgets.QDialog):
                         print ('error in regex', line_index, import_value, field_value, field_name)
                         field_value = False
             elif field_name in ["month", "strata"]:
-                dict_list = dict_strata if field_name == "strata" else dict_month
+                #dict_list = dict_strata if field_name == "strata" else dict_month
+                dict_list = field_def.get("translate", {})
                 #translate month to integer according to dict_month
                 try:
                     #import_value = int(float(import_value)) #try to translate as an integer
@@ -874,9 +832,6 @@ class CSVImporter(QtWidgets.QDialog):
                     field_def["error"] = err.args[0]
                     no_error = False
         return no_error
-
-
-                    
 
     def show_modal(self):
         self.window.exec_()
@@ -1387,7 +1342,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-
+        #get copy of dbase dictionnaries for user modifications
         self.dict_user_plot = copy.deepcopy(dict_db_plot)
         self.dict_user_tree = copy.deepcopy(dict_db_tree)
         self.current_collection = None
@@ -1395,8 +1350,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # load the GUI
         self.ui = uic.loadUi("plots.ui")
 
-        #add the treeview_searchtaxa = Class PN_taxa_search_widget() (cf. taxa_model.py)
-        self.treeview_searchtaxa = PN_taxa_search_widget()
+        #add the treeview_searchtaxa widget
+        self.treeview_searchtaxa = PN_TaxaSearch()
         layout = self.ui.QTreeViewSearch_layout
         layout.addWidget(self.treeview_searchtaxa)
         self.treeview_searchtaxa.selectionChanged.connect(self.set_buttons_taxa_enabled)
@@ -1420,8 +1375,7 @@ class MainWindow(QtWidgets.QMainWindow):
             action.triggered.connect(lambda checked, item=item: self.export_menu(item.lower()))
             export_menu.addAction(action)
         export_button.setMenu(export_menu)
-        frame_layout.addWidget(export_button)
-        
+        frame_layout.addWidget(export_button)        
         self.ui.statusBar().addPermanentWidget(frame)
 
         #add new/delete button to buttonBox_tree
@@ -1440,7 +1394,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.button_delete_plot = QtWidgets.QPushButton("Delete")
         self.button_delete_plot.setIcon(QtGui.QIcon.fromTheme("edit-delete"))
 
-        #set disabled by default
+        #set buttons disabled by default
         self.button_apply_tree.setEnabled(False)
         self.button_new_tree.setEnabled(False)
         self.button_new_plot.setEnabled(False)
@@ -1457,46 +1411,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.buttonBox_plot.addButton(self.button_new_plot, QtWidgets.QDialogButtonBox.ActionRole)
         self.ui.buttonBox_plot.addButton(self.button_delete_plot, QtWidgets.QDialogButtonBox.ActionRole)
 
-    #connect to the database
-        connected_indicator = PN_database_widget()
+        #connect to the database
+        connected_indicator = PN_DatabaseConnect()
         self.ui.statusBar().addPermanentWidget(connected_indicator)
-        connected_indicator.open()
-        #return if not open
+        connected_indicator.open()        
         if not connected_indicator.dbopen:
-            return
+            return #return if not open
         self.db = connected_indicator.db
         
-        self.trview_identity = self.ui.trView_resume
-        self.PN_trview_identity = Qtreeview_Json (self.trview_identity)
-        self.ui.tabWidget_tree.currentChanged.connect(self.fill_trview_resume)
+        #self.trview_identity = self.ui.trView_resume
+        self.PN_trview_identity = PN_JsonQTreeView ()
+        layout = self.ui.tabWidget_tree.widget(3).layout()
+        layout.addWidget(self.PN_trview_identity)
+        self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
 
-
-
-        # #open database
-        # dbopen = False
-        # import configparser
-        # config = configparser.ConfigParser()
-        # file_config = config.read('config.ini')
-        # section = 'database'
-        # self.statusIndicator.setStyleSheet("background-color: rgb(255, 0, 0); border-radius: 5px;")
-        # self.statusConnection.setText("Not Connected")
-        # if file_config and section in config.sections():
-        #     db = QtSql.QSqlDatabase.addDatabase("QPSQL")
-        #     db.setHostName(config['database']['host'])
-        #     db.setUserName(config['database']['user'])
-        #     db.setPassword(config['database']['password'])
-        #     db.setDatabaseName(config['database']['database'])
-        #     if db.open():
-        #         dbopen = True
-        #         default_db_name = QtSql.QSqlDatabase.database().databaseName()
-        #         self.statusIndicator.setStyleSheet("background-color: rgb(0, 255, 0); border-radius: 5px;")
-        #         self.statusConnection.setText("Connected : "+ default_db_name)
-        # #return if not open
-        # if not dbopen:
-        #     return       
-
-        #if open
         #connect slot to function event
+        self.ui.tabWidget_tree.currentChanged.connect(self.fill_trview_resume)
         self.button_new_plot.clicked.connect(self.button_new_plot_click)
         self.button_new_tree.clicked.connect(self.button_new_tree_click)
         self.button_apply_tree.clicked.connect(self.button_apply_tree_click)
@@ -1508,9 +1438,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.comboBox_collections.currentIndexChanged.connect(self.load_collections)
         self.ui.comboBox_types.activated.connect(self.load_plots)
         self.ui.filter_button_dead.toggled.connect(self.load_trees)
-
         self.ui.filter_button_historical.toggled.connect(self.load_trees)
-
         self.ui.filter_button_trait.toggled.connect(self.load_trees)
         self.ui.filter_button_fruit.toggled.connect(self.load_trees)
         self.ui.filter_button_flower.toggled.connect(self.load_trees)
@@ -1519,12 +1447,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.button_add_synonym.clicked.connect(self.add_synonym)
         self.ui.slider_history.valueChanged.connect(self.slider_history_seturrentIndex)
         self.ui.button_import_trees.clicked.connect(self.button_import_trees_click)
-
-        #self.ui.pushButton.clicked.connect(self.test)       
-        self.ui.lineEdit_identifier.textChanged.connect(self.load_plots)       
-
+        self.ui.lineEdit_identifier.textChanged.connect(self.load_plots) 
         
-         # set the editors delegate to Qtableview(s)
+        #set the editors delegate to Qtableview(s)
         self.delegate = CustomDelegate()
         self.ui.tableView_tree.setItemDelegate(self.delegate)
         self.ui.tableView_plot.setItemDelegate(self.delegate)
@@ -1545,7 +1470,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.comboBox_collections.setCurrentIndex(0)
 
     def export_menu(self, item):
-        import csv
         #set parameters to QtWidgets.QFileDialog
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.ReadOnly
@@ -1562,9 +1486,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if not file_name.lower().endswith(".csv"):
             file_name += ".csv"
         delimiter = ';'
-
-
-
     #export either plots, trees, taxa and occurrences
         sql = ""
         data = []
@@ -1609,27 +1530,12 @@ class MainWindow(QtWidgets.QMainWindow):
                             _value = '"' + _value + '"'
                         _data.append(_value)
                     data.append(_data)
-                #write the data
+        #write the data into the CSV file_name
         with open(file_name, "w", newline="") as file:
             writer = csv.writer(file, delimiter=delimiter, skipinitialspace = True, quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
             writer.writerows(data)
     
-    def test(self):
-        if self.ui.lineEdit_identifier.text():
-            if len (self.ui.lineEdit_identifier.text()) > 3:
-                self.load_plots()
-        #         _tmp.append(f"identifier ILIKE '%{self.ui.lineEdit_identifier.text()}%'")
-
-        # first_index = self.ui.treeView_collections.model().index(0, 0)
-        # self.ui.treeView_collections.setCurrentIndex(first_index)
-
-        # self.load_plots(270)
-        # self.ui.tblView_resolution.setModel(None)
-        # self.load_trees(213)
-
-
     def set_dict_dbase(self, id, table):
-        #print ("set_dict_dbase",table, id)
     #fill the dict_dbase (tree or plot) from database and reload the dict_user (plot or tree)
         if table == 'plots':
             sql_select = f"SELECT * FROM {DBASE_SCHEMA_PLOTS} WHERE id_plot = {id}"
@@ -1921,7 +1827,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def tableview_plots_selectionChanged(self):
     #a tableview_plots slot, set resolution_model and resume.setModel to None to enforce load_taxa
         self.ui.tblView_resolution.setModel(None)
-        self.ui.trView_resume.setModel(None)
+        self.PN_trview_identity.setModel(None)
         self.load_trees()
         self.fill_trview_resume()
 
@@ -2093,15 +1999,13 @@ class MainWindow(QtWidgets.QMainWindow):
         dict_import["longitude"] = copy.deepcopy(dict_db_plot["longitude"])
         dict_import["latitude"] = copy.deepcopy(dict_db_plot["latitude"])
         tab_column.append("id_plot")
-
-
         #load the class and UI
-        test = CSVImporter(dict_import)
-        test.load()
-        test.show_modal()
-        if test.rows_imported > 0:
+        CSV_Importer = CSVImporter(dict_import)
+        CSV_Importer.load()
+        CSV_Importer.show_modal()
+        if CSV_Importer.rows_imported > 0:
             self.load_plots()
-        print (str(test.rows_imported) + " trees imported")
+        print (str(CSV_Importer.rows_imported) + " trees imported")
 
 
     def button_new_tree_click(self):
@@ -2574,15 +2478,15 @@ class MainWindow(QtWidgets.QMainWindow):
         query.next()
         json_properties = query.value("result_json")
         if json_properties:
-            test = json.loads(json_properties)
+            json_properties = json.loads(json_properties)
             
             #sort the dict to be more smart
             dict_sort = {'richness': {}}
             fieldname = ['trees', 'flower', 'fruit', 'strata'] + fieldname
             #fill the dict_sort with sorted value
             for item in fieldname:
-                dict_sort[item] = {'unit':test[item]['unit'], 'count':test[item]['count'], 'average':test[item]['average'], 
-                                   'min':test[item]['min'], 'max':test[item]['max'], 'stddev':test[item]['stddev'] 
+                dict_sort[item] = {'unit':json_properties[item]['unit'], 'count':json_properties[item]['count'], 'average':json_properties[item]['average'], 
+                                   'min':json_properties[item]['min'], 'max':json_properties[item]['max'], 'stddev':json_properties[item]['stddev'] 
                                    }
             #modify some key (del and create)
             dict_sort['trees']['alive'] = dict_sort['trees'].pop('average')
@@ -2611,8 +2515,6 @@ class MainWindow(QtWidgets.QMainWindow):
             dict_sort['richness'] = {'taxa': dict_sort['trees'].pop('min'),'families' :query.value('families'), 'genus' :query.value('genus'), 'species' :query.value('species'),
                                     'infra' :query.value('infra')
                                     }
-
-
             #delete key with None value
             for clef, sous_dico in dict_sort.items():
                 dict_sort[clef] = {k: v for k, v in sous_dico.items() if v is not None}
@@ -2778,7 +2680,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tab_name = self.ui.tabWidget_tree.currentWidget().objectName()
         if tab_name != 'tab_resume':
             return
-        if self.ui.trView_resume.model(): #set to None self.tableview_plots_selectionChanged
+        if self.PN_trview_identity.model(): #set to None self.tableview_plots_selectionChanged
             return
         self.PN_trview_identity.setData (self.get_properties_json())
 
@@ -2849,7 +2751,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     item1.setData(value, Qt.DisplayRole)
                 if field_def.get("changed", False):
                     font = QtGui.QFont()
-                    font.setBold(True) 
+                    font.setUnderline(True) 
                     item.setFont(font)
                     is_changed = True
 

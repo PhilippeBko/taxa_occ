@@ -383,9 +383,6 @@ def set_value_todabase2(niamoto_table):
     while query.next():
         points.append(query.value(0))  # Récupérer les coordonnées géographiques sous forme de POINT(lon lat)
     values_raster = raster_loader.get_value([(float(pt.split()[0].replace('POINT(', '')), float(pt.split()[1].replace(')', ''))) for pt in points])
-    raster_loader.get_value([(165.1116333, -21.13367271), (165.00839233, -20.85251427)])
-    
-    print (raster_loader.get_value([(165.1116333, -21.13367271), (165.00839233, -20.85251427)]))
     i = 0
     row_count = len (values_raster)
     start_time = time.time()

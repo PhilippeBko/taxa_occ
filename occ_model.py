@@ -308,7 +308,7 @@ class PN_occ_explore():
     def get_taxa_properties(self):
 #return a dictionnary (json) with taxa properties with count by species and by occurrences
         #def _sql_properties ():
-        sql_gabarit = """
+        sql_gabarit = f"""
         WITH 
             taxa_properties AS (
             SELECT id_taxonref, key AS cat, (jsonb_each_text(value)).*
@@ -320,7 +320,7 @@ class PN_occ_explore():
                     count(a.id_taxonref)::integer as count,
                     count(DISTINCT a.id_taxonref)::integer as count_species
                 FROM 
-                    __TABLETOEXPLORE__ a 
+                    {self.tabletoExplore} a 
                 INNER JOIN
                     taxa_properties b
                 ON a.id_taxonref = b.id_taxonref
@@ -330,7 +330,7 @@ class PN_occ_explore():
             )
         SELECT * FROM count_properties
         """
-        sql_gabarit = sql_gabarit.replace ("__TABLETOEXPLORE__", self.tabletoExplore)
+        #sql_gabarit = sql_gabarit.replace ("__TABLETOEXPLORE__", self.tabletoExplore)
         tab_traits = {}
         #get table of traits from taxa
         query = QtSql.QSqlQuery (sql_gabarit)
