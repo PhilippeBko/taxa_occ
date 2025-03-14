@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QItemDelegate, QApplication, QMessageBox, QLineEdit,
 from PyQt5.QtCore import Qt #, pyqtSignal, QObject
 #from PyQt5 import QtWidgets
 #from PyQt5.QtCore import *
-from commons import list_db_fields, get_reference_field, list_db_traits, get_column_type
+from core.functions import list_db_fields, get_reference_field, list_db_traits, get_column_type
 
 class NonEditableModel(QtGui.QStandardItemModel):
 #a special class derived from QStandardItemModel to allow some cells to be edited

@@ -4,6 +4,7 @@ include
 share
 bin
 dist
-build
+OLD_build
 .vscode
 __pycache__
+OLD

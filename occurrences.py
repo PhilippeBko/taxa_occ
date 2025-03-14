@@ -1,22 +1,19 @@
 #import os
 import sys
-from PyQt5 import QtWidgets, uic
+from PyQt5 import QtWidgets, uic, QtGui, QtSql, QtCore
 from PyQt5.QtGui import QStandardItem
-from PyQt5 import QtGui, QtSql, QtCore
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QItemSelectionModel, pyqtSignal
 
-from occ_model import PN_taxa_resolution_model, PN_occ_model, PN_occ_tables, PN_occ_explore
-from taxa_model import PN_edit_synonym, PNSynonym
-from class_properties import Qtreeview_Json
-from commons import get_str_value, list_db_fields, list_db_traits,postgres_error, PN_database_widget
-from import_csv import NonEditableModel, ComboBoxDelegate, CSVTranslate
+from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect
+from core.functions import get_str_value, list_db_fields, list_db_traits,postgres_error
+from models.synonyms import PNSynonym, PN_edit_synonym
+from models.occ_model import PN_taxa_resolution_model, PN_occ_model, PN_occ_tables, PN_occ_explore
 
+from import_csv import NonEditableModel, ComboBoxDelegate, CSVTranslate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 #import pandas as pd
 import re
-
-
 
 class DataThread():
     data_ready = pyqtSignal(list)
@@ -71,12 +68,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         # load the GUI
-        self.window = uic.loadUi("pn_occurrences.ui")
+        self.window = uic.loadUi("ui/occurrences.ui")
         self.suggested_id_taxonref = 0
         self.suggested_name_taxon_ref  = None
-    #setting the widget Qtreeview_Json
+    #setting the widget PN_JsonQTreeView
         header = ['Category', 'Taxa', 'Occurrences']
-        self.PN_trview_traits = Qtreeview_Json (True, True, header)
+        self.PN_trview_traits = PN_JsonQTreeView (True, True, header)
         layout = self.window.tview_properties_layout.layout()
         layout.addWidget(self.PN_trview_traits)
 
@@ -152,7 +149,7 @@ class MainWindow(QtWidgets.QMainWindow):
         frame_layout.addWidget(export_button)
         self.window.statusBar().addPermanentWidget(frame)
     #connect to the database
-        connected_indicator = PN_database_widget()
+        connected_indicator = PN_DatabaseConnect()
         self.window.statusBar().addPermanentWidget(connected_indicator)
         connected_indicator.open()
         #return if not open
@@ -1388,13 +1385,10 @@ class MainWindow(QtWidgets.QMainWindow):
             ext = ext[1:]
             self.myFigure.figure.savefig(file_name, dpi = 600, format = ext)
 
-
-
-
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     #set the style
-    with open("Diffnes.qss", "r") as f:
+    with open("ui/Diffnes.qss", "r") as f:
         #with open("Photoxo.qss", "r") as f:
         _style = f.read()
         app.setStyleSheet(_style)

@@ -10,18 +10,18 @@ dict_strata = {
     "emergent": [4, "émergent","emergente"]
 }
 dict_month = {
-    1: ["enero","january","janvier", "janv.", "jan.", "ene."], 
-    2: ["febrero","february", "février", "feb.", "fev.", "fév."], 
-    3: ["marzo", "march", "mars"],
-    4: ["abril", "april", "avril"], 
-    5: ["mayo", "may", "mai"], 
-    6: ["junio", "june", "juin"],
-    7: ["julio", "july", "juillet"], 
-    8: ["agosto", "august", "août", "aug.", "ago."], 
-    9: ["septiembre", "september", "septembre", "sept.", "sep"],
-    10: ["octubre", "october", "octobre", "oct."], 
-    11: ["noviembre", "november", "novembre", "nov."], 
-    12: ["diciembre", "december", "décembre", "déc.", "dec.", "dic."]
+    1: ["january","enero","janvier", "janv.", "jan.", "ene."], 
+    2: ["february","febrero", "février", "feb.", "fev.", "fév."], 
+    3: ["march", "marzo", "mars"],
+    4: ["april", "abril", "avril"], 
+    5: ["may", "mayo", "mai"], 
+    6: ["june", "junio", "juin"],
+    7: ["july", "julio", "juillet"], 
+    8: ["august", "agosto", "août", "aug.", "ago."], 
+    9: ["september", "septiembre", "septembre", "sept.", "sep"],
+    10: ["october", "octubre", "octobre", "oct."], 
+    11: ["november", "noviembre", "novembre", "nov."], 
+    12: ["december", "diciembre", "décembre", "déc.", "dec.", "dic."]
 }
 RANK_TYPOLOGY = {}
 """ list_db_type_translate = {1:'boolean', 2:'integer', 3:'integer', 4:'integer', 5:'integer', 6:'numeric', 7: 'text', 10:'text', 14: 'date', 15:'date', 16:'date',
@@ -112,7 +112,7 @@ list_db_properties = {
 }
 
 flower_reg_pattern = r'fl\.*|bt\.*|boutons?|cauliflor(e|a|ous)?|fert(?:ile|\.|)|fleurs?|inflorescences?|flowers?|buttons?|inflos?'
-fruit_reg_pattern = r'fr\.*|figues?|fruits?|c[ôo]nes?|graines?|seeds?'
+fruit_reg_pattern = r'fr\.*|figues?|fruits?|c[ôo]nes?|graines?|seeds?|figs?'
 
 
 def get_column_type(_type):
@@ -500,12 +500,3 @@ def get_dict_from_species(_taxa):
 
 
 
-
-
-
-
-
-if __name__ == '__main__':
-    print (get_str_value(10) )
-    taxa = get_dict_from_species('Miconia calvescens DC. var calvescens Birnbaum')
-    print (taxa)

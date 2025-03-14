@@ -7,15 +7,12 @@ import time
 
 from PyQt5 import uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QModelIndex
-
-from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView
-
 from api_thread import TaxRefThread, API_ENDEMIA
 
-from taxa_model import (TableModel, PNTaxa, 
-                        PN_add_taxaname, PN_edit_taxaname, PN_move_taxaname,
-                        PNSynonym, PN_edit_synonym)
-from core.functions import (get_dict_from_species, get_str_value, list_db_properties)
+from taxa_model import (TableModel, PNTaxa,  PN_add_taxaname, PN_edit_taxaname, PN_move_taxaname )
+from models.synonyms import PNSynonym, PN_edit_synonym
+from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView
+from core.functions import (get_dict_from_species, get_str_value, postgres_error, list_db_properties)
 ########################################
 
 class EditProperties_Delegate(QtWidgets.QStyledItemDelegate):
@@ -88,7 +85,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         # load the GUI
-        self.window = uic.loadUi("pn_main.ui")
+        self.window = uic.loadUi("ui/taxanames.ui")
 
     # setting the main_tableView
         model_tableview = TableModel()
@@ -214,7 +211,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def test_endemia(self):
-        sql_tmp = "Select id_taxonref, taxaname, authors, id_rank from taxonomy.taxa_names where id_rank = 21"
+        sql_tmp = "SELECT id_taxonref, taxaname, authors, id_rank FROM taxonomy.taxa_names WHERE id_rank = 21"
         query = self.db.exec(sql_tmp)
         while query.next():
             idtaxonref = query.value("id_taxonref")
@@ -237,7 +234,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show(self):
         self.window.show()
-
 
     def sql_taxa_delete_synonym(self, synonym):
         #return a sql statement for deleting a synonym
@@ -290,9 +286,17 @@ class MainWindow(QtWidgets.QMainWindow):
         return sql_where
 
     def get_similar_names(self, idtaxonref):
-        #return a dictionnary with all the names for the idtaxonref
-        sql_query = f"SELECT a.name, a.category, a.id_category FROM taxonomy.pn_names_items({idtaxonref}) a ORDER BY a.id_category"
-        #query = QtSql.QSqlQuery(sql_query)
+    #return a dictionnary with all the names for the idtaxonref
+        sql_query = f"""
+                    SELECT 
+                        a.name, 
+                        a.category, 
+                        a.id_category 
+                    FROM 
+                        taxonomy.pn_names_items({idtaxonref}) a 
+                    ORDER BY 
+                        a.id_category
+                    """
         query = self.db.exec(sql_query)
         dict_properties = {}
         while query.next():
@@ -392,7 +396,10 @@ class MainWindow(QtWidgets.QMainWindow):
             #use the internal db function to apply and propage modif to childs
             sql_query =f"""
                         SELECT 
-                            id_taxonref, taxaname, coalesce(authors,'') as authors, id_rank
+                            id_taxonref, 
+                            taxaname, 
+                            coalesce(authors,'') as authors, 
+                            id_rank
                         FROM 
                             taxonomy.pn_taxa_edit ({id_taxonref}, '{_name}', '{_authors}', NULL, NULL, {_published}, True)"
                        """
@@ -408,6 +415,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     tab_updated_datas.append(item)
                 #emit a signal with tab_updated_datas (= tab of changed PNTaxa's)
                 self.tlview_taxonref_refresh(tab_updated_datas)
+            else:
+                msg = postgres_error(result.lastError())
+                QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
         
     #create a sub dictionnaries (a copy without the key identity) to compare only json_properties
         sub_dict_db_properties = dict_db_properties.copy()
@@ -429,6 +439,10 @@ class MainWindow(QtWidgets.QMainWindow):
             if len (tab_result) > 0:
                 sql_query = sql_query.replace('NULL', "'" +json.dumps(tab_result) +"'")
             result = self.db.exec (sql_query)
+            code_error = result.lastError().nativeErrorCode ()
+            if len(code_error) != 0:
+                msg = postgres_error(result.lastError())
+                QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
        
     def trView_hierarchy_selecteditem(self):
     #transform the dict_item from the hierarchical selecteditem to a PNTaxa object
@@ -524,19 +538,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     {self.sql_where_taxanames()}
                     ORDER BY a.taxaname
                     """
-        # sql_query = "\nSELECT a.taxaname::text, a.authors, a.id_rank, a.id_taxonref, a.published, score_api "
-        # sql_query +="\nFROM taxonomy.taxa_names a "
-        # sql_query +="\nLEFT JOIN (SELECT id_taxonref, count(id_taxonref) as score_api FROM"
-        # sql_query +="\n(SELECT id_taxonref, jsonb_each(metadata) FROM taxonomy.taxa_reference WHERE metadata IS NOT NULL) z"
-        # sql_query +="\nGROUP BY id_taxonref ) c"
-        # sql_query +="\nON a.id_taxonref = c.id_taxonref"
-
-        # if idtaxonref > 0:
-        #     sql_query += f"\nINNER JOIN taxonomy.pn_taxa_childs ({idtaxonref},True) b ON a.id_taxonref = b.id_taxonref"
-        # sql_query += self.sql_where_taxanames()
-        # sql_query += "\nORDER BY a.taxaname"
-
-       # print (sql_query)
+        
         # fill tlview with query result
         data = []
         query = self.db.exec(sql_query)
@@ -579,7 +581,13 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def trview_metadata_setData(self, selecteditem):
         #load metadata json from database to PN_tlview_metadata
-        sql_query = f"SELECT a.metadata FROM taxonomy.taxa_reference a WHERE a.id_taxonref = {selecteditem.idtaxonref}"
+        sql_query = f"""
+                    SELECT 
+                        a.metadata 
+                    FROM 
+                        taxonomy.taxa_reference a 
+                    WHERE 
+                        a.id_taxonref = {selecteditem.idtaxonref}"""
         query = self.db.exec(sql_query)
         
         query.next()
@@ -641,7 +649,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 _taxaname += _parser +"'" +taxa.strip() +"'"
                 _parser=", "
             #get the new names that are not in the taxa namespace (id_taxonref IS NULL)
-            sql_query = f"SELECT original_name FROM taxonomy.pn_taxa_searchnames( array[{_taxaname}]) WHERE id_taxonref IS NULL"        
+            sql_query = f"""
+                        SELECT 
+                            original_name 
+                        FROM 
+                            taxonomy.pn_taxa_searchnames( array[{_taxaname}]) 
+                        WHERE 
+                            id_taxonref IS NULL
+                        """
             #sql_query = sql_query.replace('_taxaname', _taxaname)
             query = self.db.exec (sql_query)
             new_unique_taxa = []
@@ -651,7 +666,10 @@ class MainWindow(QtWidgets.QMainWindow):
             #add new synonyms names according to the previous query
             #sql_insert = "SELECT taxonomy.pn_taxa_edit_synonym ('_synonymstr','Nomenclatural'," +str( selecteditem.id_taxonref) + ")" 
             
-            sql_insert = f"SELECT taxonomy.pn_names_add ('_synonymstr','Nomenclatural',{selecteditem.id_taxonref})"
+            sql_insert = f"""
+                            SELECT 
+                                taxonomy.pn_names_add ('_synonymstr','Nomenclatural',{selecteditem.id_taxonref})
+                        """
             for taxa in new_unique_taxa:
                 dict_taxa = get_dict_from_species(taxa)
                 if dict_taxa is None:
@@ -666,7 +684,6 @@ class MainWindow(QtWidgets.QMainWindow):
                         #self.tlview_similar.setModel(None)
                     except Exception:
                         continue
-
             #manage and save json medata (including or not synonyms depends of the check line above)
             if len(api_json) == 0:
                 sql_query = "UPDATE taxonomy.taxa_reference SET metadata = NULL"
@@ -788,8 +805,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tlviews_refresh(selecteditem.id_taxonref)
             self.combo_taxa_deletedItem(selecteditem)
         else:
-            msg = msg + "Undefined error"
-            msg = msg + "\n\n" + result.lastError().text()
+            msg = postgres_error(result.lastError())
             QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
         return
 
@@ -943,12 +959,15 @@ class MainWindow(QtWidgets.QMainWindow):
         result = self.db.exec(sql_query)
         if len(result.lastError().nativeErrorCode()) == 0:
             self.trview_names_setdata(selecteditem)
+        else:
+            msg = postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     #set the style
-    with open("Diffnes.qss", "r") as f:
+    with open("ui/Diffnes.qss", "r") as f:
         #with open("Photoxo.qss", "r") as f:
         _style = f.read()
         app.setStyleSheet(_style)

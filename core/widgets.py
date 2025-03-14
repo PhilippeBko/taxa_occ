@@ -230,8 +230,6 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
             else:
                 self.db.close()
 
-
-
 #class to display a search widget composed of a search text and and treeview result with  matched taxa and score
 class PN_TaxaSearch(QtWidgets.QWidget):
     selectionChanged = pyqtSignal(str)

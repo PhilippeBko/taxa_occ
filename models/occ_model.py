@@ -1,6 +1,4 @@
-import sys
-
-from PyQt5 import QtCore, QtGui, QtWidgets, QtSql
+from PyQt5 import QtCore, QtGui, QtSql
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTreeView, QTableView
 
@@ -9,7 +7,7 @@ import matplotlib.pyplot as plt
 from cartopy import crs as ccrs, feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
-from commons import get_str_value, list_db_traits, get_column_type, list_db_fields
+from core.functions import get_str_value, list_db_traits, get_column_type, list_db_fields
 #from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class PN_occ_model(QtCore.QAbstractTableModel):
@@ -712,126 +710,6 @@ class PN_occ_explore():
         #         tab_family[_genus] = tab_genus + [_species]
         #     self.taxas[_family][_genus] = tab_family[_genus]
             
-
-
-
-# def sql_with_stacked_datas (self):
-#     #return the with sql (stacked_datas) from the tabletoexplore filter on searchtaxa if not None
-#     #only data valid (i.e. with taxaname and at least (GPS, Phenology or Traits))
-#     #add a filter on taxaname if self.searchtaxa is not None
-#     union_query = "WITH stacked_datas AS (SELECT * FROM " + self.tabletoExplore
-#     if len(get_str_value(self.searchtaxa)) > 0:
-#             union_query += "\nWHERE id_taxonref IN (" + self.searchtaxa + ")"
-#     union_query += '\n)'
-#     return union_query
-    
-# def get_traits_occurrences(self):
-#     #return a dictionnary with statistics for any traits
-#     # the resulting dictionnary could be view through a class 'class_identity'
-#         with_query = self.sql_with_stacked_datas()
-#         union_query = ''
-#     #get traits from occurrences
-#         _tmp=[]        
-#         _sqlquery = "SELECT\n _traits_\nFROM stacked_datas WHERE _field_ IS NOT NULL"
-#         index = 0
-#         _tmpfield_species = []
-#         for field, value in list_db_traits.items():
-#             if field in self.dbfields:
-#                 _tmpfield =[]
-#                 ftype = value["type"]
-#                 try:
-#                     funit = " (" + value["unit"] + ")"
-#                 except:
-#                     funit = ''
-#                 if ftype =="numeric":
-#                     _tmpfield_species.append ("avg("+ field + ")::numeric(6,2) AS "+ field)
-#                     _tmpfield.append("'"+ field + funit + "'::text AS category")
-#                     _tmpfield.append("count(DISTINCT id_taxonref)::integer AS count_species"),
-#                     _tmpfield.append("count(id_taxonref)::integer AS count")
-#                     _tmpfield.append("avg("+ field + ")::numeric(6,2) AS avg")
-#                     _tmpfield.append("min("+ field + ")::numeric(6,2) AS min")
-#                     _tmpfield.append("max("+ field + ")::numeric(6,2) AS max")
-#                     _tmpfield.append("percentile_cont(0.50) WITHIN GROUP (ORDER BY " +field +" ASC)::numeric(6,2) AS median")
-#                     _tmpfield.append("stddev("+ field +")::numeric(6,2) AS stdv"),
-#                     _tmpfield.append("(SELECT avg("+ field +")::numeric(6,2) FROM stacked_datas_species) AS avg_species"),
-#                     _tmpfield.append("(SELECT min("+ field +")::numeric(6,2) FROM stacked_datas_species) AS min_species"),
-#                     _tmpfield.append("(SELECT max("+ field +")::numeric(6,2) FROM stacked_datas_species) AS max_species"),
-#                     _tmpfield.append("(SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY " +field +" ASC) FROM stacked_datas_species)::numeric(6,2) AS median_species"),
-#                     _tmpfield.append("(SELECT stddev("+ field +")::numeric(6,2) FROM stacked_datas_species) AS stdv_species"),
-#                     _tmpfield.append(str(index) + "::integer as pos")
-#                     _traits_ = ",\n ".join(_tmpfield)
-#                     sql_query = _sqlquery.replace("_traits_",  _traits_)
-#                     sql_query = sql_query.replace("_field_",  field)
-#                     _tmp.append(sql_query)
-#                     index += 1
-#         union_query = "\n UNION ALL\n ".join(_tmp)
-#         union_query += "\nORDER BY pos"
-#         with_query2 = "stacked_datas_species AS (\nSELECT\n" + ",\n ".join(_tmpfield_species)
-#         with_query2 += "\nFROM stacked_datas GROUP BY species\n)"
-        
-#         sql_query = with_query + ",\n"+ with_query2 + "\n" + union_query
-#         #print (sql_query)
-#         query = QtSql.QSqlQuery (sql_query)
-#         tab_traits = {}
-#         while query.next():
-#             #to ensure order 
-#             tab_trait ={"count":'',"min":'', "max":'','avg':'', "median":'', "stdv":''}
-#             for _key in tab_trait.keys():
-#                 _value_species = get_str_value(query.value(_key +"_species"))
-#                 _value = get_str_value(query.value(_key))
-#                 tab_trait[_key] = [_value_species, _value]
-#             tab_traits[query.value("category")] = tab_trait 
-#     #get traits from taxa
-#         sql_query = """ 
-#             SELECT 
-#                 cat, key, value,
-#                 count(a.id_taxonref)::integer as count,
-#                 count(DISTINCT a.id_taxonref)::integer as count_species
-#             FROM 
-#                 stacked_datas a 
-#                 INNER JOIN 
-#                     (SELECT id_taxonref, key AS cat, (jsonb_each_text(value)).*
-#                     FROM 
-#                         (SELECT id_taxonref, (jsonb_each(properties)).*
-#                         FROM taxonomy.taxa_reference) a
-#                     ) b
-#             ON a.id_taxonref = b.id_taxonref
-#             WHERE value <>'False'
-#             GROUP BY b.cat, b.KEY, value
-#             ORDER BY b.cat, b.KEY, value
-#         """
-#         sql_query = with_query + "\n" + sql_query
-#         #print (with_query)
-#         query = QtSql.QSqlQuery (sql_query)
-#         while query.next():
-#             tab_trait ={}
-#             #check for the category
-#             try:
-#                 tab_trait = tab_traits[query.value("cat")]
-#             except:
-#                 tab_traits[query.value("cat")] = {}
-#             #check for the key
-#             try:
-#                 tab_trait = tab_trait[query.value("key")]
-#             except:
-#                 tab_traits[query.value("cat")][query.value("key")] = {}
-#             #case, if value = True then affected to the key
-#             if query.value("value") == 'True':
-#                 tab_traits[query.value("cat")][query.value("key")] = [query.value("count_species"), query.value("count")]
-#             else : #else affected a sub category with value
-#                 tab_trait = tab_traits[query.value("cat")][query.value("key")]
-#                 tab_trait[query.value("value")] = [query.value("count_species"), query.value("count")]
-#                 tab_traits[query.value("cat")][query.value("key")] = tab_trait
-#         # while query.next():
-#         #     data_occurrences.append([get_str_value(query.value(record.fieldName(x))) for x in range(record.count()-1)])
-#         return (tab_traits)
-
-
-
-
-
-
-
 
 #########################################################################################################
 class PN_occ_tables(QTableView):
@@ -1739,33 +1617,119 @@ class PN_taxa_resolution_model(QtCore.QAbstractTableModel):
 
 
 
-
-
-class MainWindow(QtWidgets.QMainWindow):
+# def sql_with_stacked_datas (self):
+#     #return the with sql (stacked_datas) from the tabletoexplore filter on searchtaxa if not None
+#     #only data valid (i.e. with taxaname and at least (GPS, Phenology or Traits))
+#     #add a filter on taxaname if self.searchtaxa is not None
+#     union_query = "WITH stacked_datas AS (SELECT * FROM " + self.tabletoExplore
+#     if len(get_str_value(self.searchtaxa)) > 0:
+#             union_query += "\nWHERE id_taxonref IN (" + self.searchtaxa + ")"
+#     union_query += '\n)'
+#     return union_query
     
-    def __init__(self):
-        super().__init__()
-        from taxa_model import PNSynonym
-        self.table = QtWidgets.QTableView()
-        data = [
-           PNSynonym(123,'Miconia', 'Miconia DC.'),
-           PNSynonym(124,'Miconia calvescens',  'Miconia calvescens')
-        #  # PNTaxa(1456,'Sapotaceae', 'L.', 10),
-        ]
-       
-        #self.model = TableModel(data)
-        self.model = PN_taxa_resolution_model()
-        self.model.resetdata(data)
-        self.table.setModel(self.model)
-       # self.model.additem(PNSynonym(1456,'Sapotaceae', 'L.', 10, 2))
-       # self.model.additem(PNSynonym(1800,'Arecaceae', 'L.', 10, 3))
+# def get_traits_occurrences(self):
+#     #return a dictionnary with statistics for any traits
+#     # the resulting dictionnary could be view through a class 'class_identity'
+#         with_query = self.sql_with_stacked_datas()
+#         union_query = ''
+#     #get traits from occurrences
+#         _tmp=[]        
+#         _sqlquery = "SELECT\n _traits_\nFROM stacked_datas WHERE _field_ IS NOT NULL"
+#         index = 0
+#         _tmpfield_species = []
+#         for field, value in list_db_traits.items():
+#             if field in self.dbfields:
+#                 _tmpfield =[]
+#                 ftype = value["type"]
+#                 try:
+#                     funit = " (" + value["unit"] + ")"
+#                 except:
+#                     funit = ''
+#                 if ftype =="numeric":
+#                     _tmpfield_species.append ("avg("+ field + ")::numeric(6,2) AS "+ field)
+#                     _tmpfield.append("'"+ field + funit + "'::text AS category")
+#                     _tmpfield.append("count(DISTINCT id_taxonref)::integer AS count_species"),
+#                     _tmpfield.append("count(id_taxonref)::integer AS count")
+#                     _tmpfield.append("avg("+ field + ")::numeric(6,2) AS avg")
+#                     _tmpfield.append("min("+ field + ")::numeric(6,2) AS min")
+#                     _tmpfield.append("max("+ field + ")::numeric(6,2) AS max")
+#                     _tmpfield.append("percentile_cont(0.50) WITHIN GROUP (ORDER BY " +field +" ASC)::numeric(6,2) AS median")
+#                     _tmpfield.append("stddev("+ field +")::numeric(6,2) AS stdv"),
+#                     _tmpfield.append("(SELECT avg("+ field +")::numeric(6,2) FROM stacked_datas_species) AS avg_species"),
+#                     _tmpfield.append("(SELECT min("+ field +")::numeric(6,2) FROM stacked_datas_species) AS min_species"),
+#                     _tmpfield.append("(SELECT max("+ field +")::numeric(6,2) FROM stacked_datas_species) AS max_species"),
+#                     _tmpfield.append("(SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY " +field +" ASC) FROM stacked_datas_species)::numeric(6,2) AS median_species"),
+#                     _tmpfield.append("(SELECT stddev("+ field +")::numeric(6,2) FROM stacked_datas_species) AS stdv_species"),
+#                     _tmpfield.append(str(index) + "::integer as pos")
+#                     _traits_ = ",\n ".join(_tmpfield)
+#                     sql_query = _sqlquery.replace("_traits_",  _traits_)
+#                     sql_query = sql_query.replace("_field_",  field)
+#                     _tmp.append(sql_query)
+#                     index += 1
+#         union_query = "\n UNION ALL\n ".join(_tmp)
+#         union_query += "\nORDER BY pos"
+#         with_query2 = "stacked_datas_species AS (\nSELECT\n" + ",\n ".join(_tmpfield_species)
+#         with_query2 += "\nFROM stacked_datas GROUP BY species\n)"
+        
+#         sql_query = with_query + ",\n"+ with_query2 + "\n" + union_query
+#         #print (sql_query)
+#         query = QtSql.QSqlQuery (sql_query)
+#         tab_traits = {}
+#         while query.next():
+#             #to ensure order 
+#             tab_trait ={"count":'',"min":'', "max":'','avg':'', "median":'', "stdv":''}
+#             for _key in tab_trait.keys():
+#                 _value_species = get_str_value(query.value(_key +"_species"))
+#                 _value = get_str_value(query.value(_key))
+#                 tab_trait[_key] = [_value_species, _value]
+#             tab_traits[query.value("category")] = tab_trait 
+#     #get traits from taxa
+#         sql_query = """ 
+#             SELECT 
+#                 cat, key, value,
+#                 count(a.id_taxonref)::integer as count,
+#                 count(DISTINCT a.id_taxonref)::integer as count_species
+#             FROM 
+#                 stacked_datas a 
+#                 INNER JOIN 
+#                     (SELECT id_taxonref, key AS cat, (jsonb_each_text(value)).*
+#                     FROM 
+#                         (SELECT id_taxonref, (jsonb_each(properties)).*
+#                         FROM taxonomy.taxa_reference) a
+#                     ) b
+#             ON a.id_taxonref = b.id_taxonref
+#             WHERE value <>'False'
+#             GROUP BY b.cat, b.KEY, value
+#             ORDER BY b.cat, b.KEY, value
+#         """
+#         sql_query = with_query + "\n" + sql_query
+#         #print (with_query)
+#         query = QtSql.QSqlQuery (sql_query)
+#         while query.next():
+#             tab_trait ={}
+#             #check for the category
+#             try:
+#                 tab_trait = tab_traits[query.value("cat")]
+#             except:
+#                 tab_traits[query.value("cat")] = {}
+#             #check for the key
+#             try:
+#                 tab_trait = tab_trait[query.value("key")]
+#             except:
+#                 tab_traits[query.value("cat")][query.value("key")] = {}
+#             #case, if value = True then affected to the key
+#             if query.value("value") == 'True':
+#                 tab_traits[query.value("cat")][query.value("key")] = [query.value("count_species"), query.value("count")]
+#             else : #else affected a sub category with value
+#                 tab_trait = tab_traits[query.value("cat")][query.value("key")]
+#                 tab_trait[query.value("value")] = [query.value("count_species"), query.value("count")]
+#                 tab_traits[query.value("cat")][query.value("key")] = tab_trait
+#         # while query.next():
+#         #     data_occurrences.append([get_str_value(query.value(record.fieldName(x))) for x in range(record.count()-1)])
+#         return (tab_traits)
 
-        self.setCentralWidget(self.table)
 
-if __name__ == '__main__':
-    app=QtWidgets.QApplication(sys.argv)
 
-    window=MainWindow()
-    window.show()
-    app.exec_()
+
+
 

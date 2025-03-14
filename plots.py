@@ -11,13 +11,12 @@ import pandas as pd
 from PyQt5 import QtSql, QtGui,  uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 
-from occ_model import PN_taxa_resolution_model
-from taxa_model import PNSynonym
-
+from models.occ_model import PN_taxa_resolution_model
+from models.synonyms import PNSynonym
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaSearch
-from core.functions import (get_str_value, get_all_names, get_reference_field, list_db_fields, 
-                     flower_reg_pattern, fruit_reg_pattern
-                     )
+from core.functions import (get_str_value, get_all_names, get_reference_field, postgres_error, list_db_fields, 
+                           flower_reg_pattern, fruit_reg_pattern
+                           )
 #from class_synonyms import PNSynonym
 
 #default parameters
@@ -142,7 +141,8 @@ def database_execute_query(sql_query):
             return True
     else:
         #error in query execution
-        QtWidgets.QMessageBox.warning(None, "Database Error", query.lastError().text())
+        msg = postgres_error(query.lastError())
+        QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
         return False
         
 
@@ -180,7 +180,7 @@ class CSVImporter(QtWidgets.QDialog):
         self.type_columns = None
         self.dataframe = None
         self.buttonOK = False
-        self.window = uic.loadUi('pn_ncpippn_import.ui')
+        self.window = uic.loadUi("ui/pn_ncpippn_import.ui")
         validator = QtGui.QIntValidator(2, 2147483647)
         self.window.lineEdit.setValidator(validator)
         self.window.progressBar.setVisible(False)
@@ -1131,7 +1131,7 @@ class CSVImporter(QtWidgets.QDialog):
         model.setItem(item_insert.row(), 3, QtGui.QStandardItem(str(total_inserted)))
         
         #load UI for preview and fill the treeview
-        win_preview = uic.loadUi('pn_update_preview.ui')
+        win_preview = uic.loadUi("ui/pn_update_preview.ui")
         win_preview.buttonBox.accepted.connect(on_ok_clicked)
         win_preview.buttonBox.rejected.connect(on_cancel_clicked)
         trview_result = win_preview.trView_preview
@@ -1348,7 +1348,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_collection = None
 
         # load the GUI
-        self.ui = uic.loadUi("plots.ui")
+        self.ui = uic.loadUi("ui/plots.ui")
 
         #add the treeview_searchtaxa widget
         self.treeview_searchtaxa = PN_TaxaSearch()
@@ -2643,7 +2643,6 @@ class MainWindow(QtWidgets.QMainWindow):
         #create sql statement from unique_taxa
         items_sql = ', '.join([f"'{item}'" for item in unique_taxa])
         sql_query = f"SELECT * FROM {DBASE_SCHEMA_TAXONOMY}.pn_taxa_searchnames(array[{items_sql}]) a"
-        #sql_query += "\nLEFT JOIN taxonomy.taxa_hierarchy b ON a.id_taxonref = b.id_taxonref"
         sql_query += "\nWHERE original_name IS NOT NULL ORDER BY original_name"
         data = []
         query = QtSql.QSqlQuery (sql_query)
@@ -2667,13 +2666,6 @@ class MainWindow(QtWidgets.QMainWindow):
             selection.selectionChanged.connect(self.set_treeview_searchtaxa_text)
             self.ui.tblView_resolution.model().resetdata(data)
             self.ui.tblView_resolution.doubleClicked.connect(self.tableview_trees_filter)
-
-            
-            
-
-
-            #proxyModel.setFilterRegExp(f'.*zy.*|.*ch.*')
-            #self.ui.tblView_resolution.repaint()
 
     def fill_trview_resume(self):
         #fill the trview_resume, only if model is None and current tab is 'tab_resume' (to avoid query)
@@ -2970,19 +2962,14 @@ class MainWindow(QtWidgets.QMainWindow):
         def on_cancel_clicked():
             ui_syno.close()
         def on_ok_clicked():
-            synonym_name = ui_syno.label_synonym_taxa.text()
-            synonym_type = ui_syno.comboBox_synonym_type.currentText()
-            #str_idtaxonref = str(selectedtaxa.data(Qt.UserRole))
-            sql_query = f"SELECT {DBASE_SCHEMA_TAXONOMY}.pn_names_add ('{synonym_name}','{synonym_type}',{str_idtaxonref})"
-            # sql_query = sql_query.replace('_newsynonym', synonym_name)
-            # sql_query = sql_query.replace('_type', synonym_type)
-            # sql_query = sql_query.replace('_idtaxonref', str_idtaxonref)
+            synonym_type = ui_syno.comboBox.currentText()
+            sql_query = f"SELECT {DBASE_SCHEMA_TAXONOMY}.pn_names_add ('{selecteditem.synonym}','{synonym_type}',{str_idtaxonref})"
             ui_syno.close()
             if not database_execute_query(sql_query):
                 print ("Error edit synonyms:", sql_query)
             self.load_taxa()
             
-    #start of function defition
+    #main function defition
         index = self.ui.tblView_resolution.currentIndex()
         selecteditem = self.ui.tblView_resolution.model().data(index, Qt.UserRole)
         selectedtaxa = self.treeview_searchtaxa.currentIndex()
@@ -2994,20 +2981,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if selecteditem.resolved:
             return
-        # if selectedtaxa.parent().isValid():
-        #     selectedtaxa = selectedtaxa.parent()
-        # if not selectedtaxa.isValid():
-        #     return
-           
-        # load the GUI and connect signals
-        ui_syno = uic.loadUi("pn_addsynonym2.ui")
-        ui_syno.setWindowTitle(selectedtaxa)
-        ui_syno.label_synonym_taxa.setText(selecteditem.synonym)
-        ui_syno.buttonBox_synonym.accepted.connect(on_ok_clicked)
-        ui_syno.buttonBox_synonym.rejected.connect(on_cancel_clicked)
-        #adjust size and open dialog
-        ui_syno.adjustSize()
-        #ui_syno.setupUi(dialog)
+        ui_syno = uic.loadUi("ui/pn_editname.ui")
+        ui_syno.setMaximumHeight(1)
+        ui_syno.label_tip.setText('Add synonym...')
+        ui_syno.taxaLineEdit.setText(selectedtaxa)
+        ui_syno.name_linedit.setText(selecteditem.synonym)
+        ui_syno.name_linedit.setEnabled(False)
+        ui_syno.buttonBox.accepted.connect(on_ok_clicked)
+        ui_syno.buttonBox.rejected.connect(on_cancel_clicked)
         ui_syno.exec_()
 
     def close(self):
@@ -3015,7 +2996,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show(self):
         self.ui.show()
-        #self.window.exec_()
 
 if __name__ == '__main__':
 # connection to the database
@@ -3024,7 +3004,7 @@ if __name__ == '__main__':
     #     sys.exit("error")
     app = QtWidgets.QApplication(sys.argv)
 
-    with open("Diffnes.qss", "r") as f:
+    with open("ui/Diffnes.qss", "r") as f:
         #with open("Photoxo.qss", "r") as f:
         _style = f.read()
         app.setStyleSheet(_style)

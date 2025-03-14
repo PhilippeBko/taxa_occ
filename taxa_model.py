@@ -3,9 +3,10 @@ import sys
 import json
 from PyQt5 import QtCore, QtGui, QtWidgets, QtSql, uic
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import QTreeView, QWidget, QLineEdit, QVBoxLayout, QMessageBox, QDialogButtonBox, QGridLayout, QApplication, QCompleter
+from PyQt5.QtWidgets import QMessageBox, QDialogButtonBox, QGridLayout, QApplication, QCompleter
 from api_thread import API_TAXREF, API_ENDEMIA, API_POWO, API_FLORICAL
-import commons
+
+import core.functions as commons
 #data_prefix = {11:'subfam.', 12:'tr.', 13:'subtr.', 15:'subg.', 16:'sect.', 17:'subsect.',18:'ser.',19:'subser.',21:'',22:'subsp.',23:'var.',25:'f.',28:'cv.',31:'x'}
 
 # Main classe to store a taxaname with some properties
@@ -23,14 +24,16 @@ class PNTaxa(object):
             self.dict_species = {}
 
     def field_dbase(self, fieldname):
-        """ 
-            get a field value from the table taxonomy.taxa_reference according to a id_taxonref
-        """
-        if fieldname == 'taxonref':
-            fieldname = 'CONCAT_WS (' ',taxaname, authors) AS taxonref'
-        sql_txt = "SELECT " + fieldname + " FROM taxonomy.taxa_names"
-        sql_txt += "\nWHERE id_taxonref = " + str(self.id_taxonref)
-        query = QtSql.QSqlQuery(sql_txt)
+        """get a field value from the table taxonomy.taxa_reference according to a id_taxonref"""
+        sql_query = f"""
+                    SELECT 
+                        {fieldname} 
+                    FROM
+                        taxonomy.taxa_names
+                    WHERE
+                        id_taxonref = {self.id_taxonref}
+                   """
+        query = QtSql.QSqlQuery(sql_query)
         query.next()
         return query.value(fieldname)
 
@@ -41,33 +44,33 @@ class PNTaxa(object):
         except Exception:
             return 0
     
-    @property 
-    def authors (self):
-        return self._authors
-    @authors.setter ##/to suppress Null values from database
-    def authors (self, value):
-        self._authors = commons.get_str_value(value)
+    # @property 
+    # def authors (self):
+    #     return self._authors
+    # @authors.setter ##/to suppress Null values from database
+    # def authors (self, value):
+    #     self._authors = commons.get_str_value(value)
 
-    @property 
-    def published (self):
-        return self._published        
-    @published.setter
-    def published (self, value):
-        value = commons.get_str_value(value).lower()
-        if value == 'false':
-            self._published = False
-        elif value == 'true':
-            self._published = True
-        else:
-            self._published = None
+    # @property 
+    # def published (self):
+    #     return self._published        
+    # @published.setter
+    # def published (self, value):
+    #     value = commons.get_str_value(value).lower()
+    #     if value == 'false':
+    #         self._published = False
+    #     elif value == 'true':
+    #         self._published = True
+    #     else:
+    #         self._published = None
+
+
 
     @property
     def rank_name (self):
         try :
             txt_rk = commons.get_dict_rank_value(self.id_rank, 'rank_name')
-            #txt_rk = PNTaxa.dict_rank[self.id_rank]
         except Exception:
-           # txt_rk = PNTaxa.dict_rank[0]
             txt_rk = 'Unknown'
         return txt_rk
 
@@ -90,24 +93,20 @@ class PNTaxa(object):
     def isautonym (self):
         if self.id_rank not in [22,23]:
             return False
-        #dict_name = commons.get_dict_from_species (self.taxaname)
-        return self.dict_species.get ("autonym", None) #return self.dict_species["autonym"]
+        return self.dict_species.get ("autonym", None)
 
     @property
     def basename (self):
         if self.id_rank < 21:
             return self.taxaname.lower()
-        #dict_name = commons.get_dict_from_species (self.taxaname)
-        return self.dict_species.get ("basename", None) #self.dict_species["basename"]
+        return self.dict_species.get ("basename", None)
 
     @property
     def simple_taxaname (self):
-        #_tabname = self.taxaname.split ()
         if self.id_rank < 21:
-            #_tabname = self.taxaname.split () #_tabname[0:1]
             return self.taxaname
-        #dict_name = commons.get_dict_from_species (self.taxaname)
-        return self.dict_species.get ("name", None) #return self.dict_species["name"]
+        return self.dict_species.get ("name", None)
+    
     @property
     def json_properties(self):
         """     
@@ -115,9 +114,6 @@ class PNTaxa(object):
         from a PNTaxa class
         """
         dict_db_properties = {}
-        #selecteditem = myPNTaxa
-        # if selecteditem  is None: 
-        #     return
         #create a copy of dict_properties with empty values
         for _key, _value in commons.list_db_properties.copy().items():
             dict_db_properties[_key] = {}.fromkeys(_value,'')
@@ -150,174 +146,7 @@ class PNTaxa(object):
         except Exception:
             pass
         return dict_db_properties
-    
 
-    # @propertyy
-    # def columnCount(self):
-    #     return 3
-
-    # @property
-    # def api_json (self):
-    #     try:
-    #         if len(self.json_request) > 0: 
-    #             return self.json_request
-    #         else:
-    #             return None
-    #     except:
-    #         return None
-
-    # @property
-    # def len_json_request(self):
-    #     #return the length of the json_request field      
-    #     try:
-    #         return (len(json.loads(self.json_request)))
-    #     except:
-    #         return 0
-
-class PNSynonym(object):
-    def __init__(self, synonym = None, taxonref = None, idtaxonref = 0, category = 'Orthographic'):
-        self.synonym = synonym
-        self.category = category
-        self.taxon_ref = taxonref
-        self.id_taxonref = idtaxonref
-        self.keyname =''
-
-    @property
-    def idtaxonref(self):
-        try:
-            return int(self.id_taxonref)
-        except Exception:
-            return 0
-
-    @property
-    def resolved(self):
-        #return True if idtaxonref>0 
-        return self.idtaxonref > 0  
-
-    # @property
-    # def cleaned_name(self):
-    #     if len(self.keyname) == 0:
-    #         sql_query = "SELECT taxonomy.pn_taxa_keyname('__taxaname__') AS keyname"
-    #         sql_query = sql_query.replace("__taxaname__", self.taxon_ref)
-    #         query = QtSql.QSqlQuery (sql_query)
-    #         if query.next():
-    #             self.keyname = query.value('keyname')
-    #     return self.keyname
-
-#####################
-#Class to edit(New or update) synonym
-# add/update a new synonym to a idtaxonref or search for a idtaxonref (PN_taxa_search_widget) according to a synonym 
-class PN_edit_synonym (QtWidgets.QWidget):
-    button_click = pyqtSignal(object, int)
-    def __init__(self, myPNSynonym):
-
-        super().__init__()
-        self.ui_addname = uic.loadUi("edit_name.ui")
-        self.Qline_name = self.ui_addname.name_linedit
-        self.Qline_ref = self.ui_addname.taxaLineEdit
-        self.Qcombobox = self.ui_addname.comboBox
-        buttonbox = self.ui_addname.buttonBox
-        self.button_cancel = buttonbox.button(QtWidgets.QDialogButtonBox.Cancel)
-        self.button_ok = buttonbox.button(QtWidgets.QDialogButtonBox.Ok)
-        self.myPNSynonym = myPNSynonym
-        self.treeview_searchtaxa = PN_taxa_search_widget()
-        self.is_new = (self.myPNSynonym.synonym is None or self.myPNSynonym.idtaxonref == 0)
-
-
-    def setting_ui(self):
-        self.updated = False
-        self.Qline_name.setReadOnly(not self.myPNSynonym.resolved)
-        self.Qline_name.setText('') 
-        self.ui_addname.setMaximumHeight(500)
-        self.ui_addname.resize(500,500)
-        self.Qcombobox.setCurrentText(str(self.myPNSynonym.category))
-        self.Qline_name.setText(self.myPNSynonym.synonym)
-        #resolved depends if idtaxonref is Null
-        if not self.myPNSynonym.resolved:
-            self.ui_addname.label_tip.setText('Select Reference...')
-            #add the treeview_searchtaxa = Class PN_taxa_search_widget() (cf. taxa_model.py)
-            layout = self.ui_addname.QTreeViewSearch_layout
-            layout.addWidget(self.treeview_searchtaxa)
-            self.treeview_searchtaxa.setText(self.myPNSynonym.synonym)
-            self.treeview_searchtaxa.selectionChanged.connect(self.valid_newname)
-        else: #idtaxonref is not Null
-            if self.is_new:
-                self.ui_addname.label_tip.setText('New Synonym...')
-            else:
-                self.ui_addname.label_tip.setText('Edit Synonym...')
-            self.Qline_ref.setText(self.myPNSynonym.taxon_ref)
-            self.ui_addname.setMaximumHeight(1)
-            self.Qline_name.setFocus()
-        self.Qline_name.textChanged.connect (self.valid_newname)
-        self.Qcombobox.activated.connect(self.valid_newname)
-        self.button_ok.clicked.connect (self.accept) 
-        self.button_cancel.clicked.connect (self.close)
-        self.valid_newname()
-
-    def show(self):
-        self.setting_ui()
-        self.ui_addname.show()
-        self.ui_addname.exec()
-        
-    def close(self):
-        self.ui_addname.close()
-
-    def valid_newname(self):
-        txt_item = self.Qline_name.text().strip()
-        txt_category = self.Qcombobox.currentText().strip()         
-        flag = False
-        if len(txt_item)>3:
-            if self.myPNSynonym.resolved:
-                flag = not (self.myPNSynonym.synonym == txt_item and self.myPNSynonym.category == txt_category)
-            else:
-                new_taxonref = self.treeview_searchtaxa.selectedTaxonRef()
-                flag = new_taxonref is not None
-                self.Qline_ref.setText(new_taxonref)
-        self.button_ok.setEnabled(flag)
-
-    def accept(self):
-        self.updated = False
-        new_synonym = self.Qline_name.text().strip()
-        new_category = self.Qcombobox.currentText()
-        new_taxonref = self.Qline_ref.text().strip()
-        #is_new = True
-        if self.myPNSynonym.resolved:
-            idtaxonref = self.myPNSynonym.idtaxonref
-            #is_new = (self.myPNSynonym.synonym is None)
-        else:
-            try :
-                idtaxonref = int(self.treeview_searchtaxa.selectedTaxaId())
-            except Exception:
-                idtaxonref = 0
-        if idtaxonref == 0:
-            return
-        if self.is_new:
-            #add mode
-            sql_query = f"SELECT taxonomy.pn_names_add ('{new_synonym}','{new_category}', '{idtaxonref}')"
-        else:
-            #edit mode
-            #return if nothing has changed
-            if new_synonym == self.myPNSynonym.synonym and new_category == self.myPNSynonym.category:
-                self.ui_addname.close()
-                return True
-            sql_query = f"SELECT taxonomy.pn_names_update ('{self.myPNSynonym.synonym}','{new_synonym}', '{new_category}')"
-        #execute query
-        result = QtSql.QSqlQuery (sql_query)
-        #check for errors code (cf. postgresql function taxonomy.pn_taxa_edit_synonym)
-        code_error = result.lastError().nativeErrorCode ()
-        msg = ''
-        if len(code_error) == 0:
-            self.myPNSynonym.synonym = new_synonym
-            self.myPNSynonym.category = new_category
-            self.myPNSynonym.taxon_ref = new_taxonref                                    
-            self.myPNSynonym.id_taxonref = idtaxonref
-            self.ui_addname.close()
-            self.updated = True
-            return True
-        else:
-            msg = commons.postgres_error(result.lastError())
-        QtWidgets.QMessageBox.critical(self.ui_addname, "Database error", msg, QtWidgets.QMessageBox.Ok)
-        return False
 
 #class to generate a model (QAbstractTableModel) for QtableView widget to display taxa (PNTaxa) with red/green dot according to api_score (PNTaxa)
 class TableModel(QtCore.QAbstractTableModel):
@@ -443,127 +272,12 @@ class TableModel(QtCore.QAbstractTableModel):
         self.PNTaxon.append(clrowtable)
         self.endInsertRows()
         
-#class to display a search widget composed of a search text and and treeview result with  matched taxa and score
-class PN_taxa_search_widget(QWidget):
-    selectionChanged = pyqtSignal(str)
-    doubleClicked = pyqtSignal(object)
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # load the GUI
-        self.lineEdit_search_taxa = QLineEdit(self)
-        self.treeview_scoretaxa = QTreeView(self)
-        self.lineEdit_search_taxa.setPlaceholderText("search taxa")
-        self.treeview_scoretaxa.setEditTriggers(QTreeView.NoEditTriggers)
-        #set the model
-        self.model = QtGui.QStandardItemModel()
-        self.model.setColumnCount(2)
-        self.treeview_scoretaxa.setModel(self.model)
-        self.treeview_scoretaxa.setHeaderHidden(True)
-        #connect slots
-        self.treeview_scoretaxa.selectionModel().selectionChanged.connect(self.on_selection_changed)
-        self.treeview_scoretaxa.doubleClicked.connect(self.on_doubleClicked)
-        self.lineEdit_search_taxa.textChanged.connect(self.on_text_changed)
-        # set the layout
-        layout = QVBoxLayout()
-        layout.addWidget(self.lineEdit_search_taxa)
-        layout.addWidget(self.treeview_scoretaxa)
-        self.setLayout(layout)
-    
-    def setText(self, newtext):
-        self.lineEdit_search_taxa.setText(newtext)
-
-    def currentIndex(self):
-        return self.treeview_scoretaxa.currentIndex()
-    
-    def selectedTaxa(self):
-        return self.treeview_scoretaxa.currentIndex().siblingAtColumn(0).data()
-    
-    def selectedTaxonRef(self):
-        parent = self.treeview_scoretaxa.currentIndex().parent()
-        if parent.isValid():
-            return parent.data()
-        else:
-            return self.treeview_scoretaxa.currentIndex().data()
-        
-    def selectedTaxaId(self):
-        parent = self.treeview_scoretaxa.currentIndex().parent()
-        if parent.isValid():
-            return parent.data(Qt.UserRole)
-        else:
-            return self.treeview_scoretaxa.currentIndex().data(Qt.UserRole)
-    
-    def selectedScore(self):
-        return self.treeview_scoretaxa.currentIndex().siblingAtColumn(1).data()
-    
-    def on_selection_changed(self, selected):
-        index = selected.indexes()[0] if selected.indexes() else None
-        if index:
-            selected_item = index.data()
-            self.selectionChanged.emit(selected_item)  # Emit the slot selected_item
-            
-    def on_doubleClicked(self, index):
-        self.doubleClicked.emit(index)  # Emit the slot selected_item
-
-    def on_text_changed(self):
-        #"main" function to search for taxa resolution
-        self.model.clear()
-        search_txt = self.lineEdit_search_taxa.text()
-        _score = 0.4
-        #exlude search according to number of characters
-        if len(search_txt) < 4:
-            return
-        if len(search_txt) < 8:
-            _score = 0.2
-        #create sql query
-        sql_query = f"""
-            SELECT 
-                a.taxonref, a.score, a.id_taxonref, c.name AS synonym
-            FROM 
-                taxonomy.pn_taxa_searchname('{search_txt}', {_score}::numeric) a 
-            INNER JOIN 
-                taxonomy.taxa_nameset c 
-            ON 
-                a.id_taxonref = c.id_taxonref AND c.category <> 1
-            ORDER 
-                BY score DESC, synonym ASC
-        """
-        #print (sql_query)
-        query = QtSql.QSqlQuery (sql_query)
-        dict_nodes = {}
-        tab_header = ['taxonref', 'score']
-        while query.next():
-            id_taxonref = query.value('id_taxonref')
-            if id_taxonref in dict_nodes:
-                ref_item = dict_nodes[id_taxonref]
-            else:
-                #create the node if not already existed
-                ref_item = [QtGui.QStandardItem(str(query.value(x))) for x in tab_header]
-                ref_item[0].setData(id_taxonref, Qt.UserRole)
-                ref_item[1].setTextAlignment(Qt.AlignCenter)
-                self.model.appendRow(ref_item)
-                dict_nodes[id_taxonref] = ref_item
-                #set score in red if below 50
-                if query.value('score') < 50:
-                    _color =  QtGui.QColor(255, 0, 0)
-                    ref_item[1].setData(QtGui.QBrush(_color), Qt.ForegroundRole)
-            if query.value('synonym'):
-                ref_item[0].appendRow ([QtGui.QStandardItem(query.value('synonym'))])
-                
-        if self.model.rowCount() > 0:
-            self.treeview_scoretaxa.resizeColumnToContents(1)
-            self.treeview_scoretaxa.setExpanded(self.model.index(0, 0), True)
-            self.treeview_scoretaxa.header().setStretchLastSection(False)
-            self.treeview_scoretaxa.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-            self.treeview_scoretaxa.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        
-# 
-
 #class to add a taxon
 class PN_add_taxaname(QtWidgets.QMainWindow):
     apply_signal  = pyqtSignal(object)
     def __init__(self, myPNTaxa): # move toward a same id_rank if merge
         super().__init__()
-        self.window = uic.loadUi("pn_addtaxa.ui")
+        self.window = uic.loadUi("ui/pn_addtaxa.ui")
         self.myPNTaxa = myPNTaxa
         self.table_taxa = []
         self.data_rank = []
@@ -642,11 +356,6 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
         self.window.rankComboBox.clear()
         self.data_rank = []
         index = -1
-        # for _key, rank in commons.RANK_TYPOLOGY.items():
-        #     self.window.rankComboBox.addItem(rank["rank_name"])
-        #     self.data_rank.append(rank["id_rank"])
-        #     if rank["id_rank"] == self.myPNTaxa.id_rank:
-        #         index = self.window.rankComboBox.count()-1            
         while query2.next():
             self.window.rankComboBox.addItem(query2.value("rank_name"))
             self.data_rank.append(query2.value("id_rank"))
@@ -943,9 +652,6 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
                 item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
                               result.value("id_rank"), 'True')
                 self.updated_datas.append(item)
-                
-                # self.window.basenameLineEdit.setText('')
-                # self.window.authorsLineEdit.setText('')
                 for taxa2 in self.table_taxa:
                     if taxa2["id"] == taxa["id"]:
                         taxa2["id_taxonref"]=1000 #set to an abitrary number to exclude from new taxa
@@ -970,13 +676,13 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
         self._taxaname = ''
         self.tab_parent_comboBox =[]
         self.parent_name = self.PNTaxa.parent_name
-        self.window = uic.loadUi("pn_edittaxa.ui")
+
+        self.window = uic.loadUi("ui/pn_edittaxa.ui")
         self.window.setWindowTitle("Edit reference")        
         self.window.publishedComboBox.addItems(['True', 'False'])
         self.window.basenameLineEdit.setText(self.PNTaxa.basename)
         self.window.authorsLineEdit.setText(self.PNTaxa.authors)
-        self.window.publishedComboBox.setCurrentText (str(self.PNTaxa.published))          
-        
+        self.window.publishedComboBox.setCurrentText (str(self.PNTaxa.published))
         self.window.basenameLineEdit.textChanged.connect (self.taxaLineEdit_setdata)
         self.window.authorsLineEdit.textChanged.connect (self.taxaLineEdit_setdata)
         self.window.publishedComboBox.activated.connect(self.taxaLineEdit_setdata)
@@ -987,28 +693,30 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
         button_apply = self.window.buttonBox.button(QDialogButtonBox.Apply)
         button_apply.setEnabled(False)
         button_apply.clicked.connect(self.apply)
-
-
-        
-   
-        #set the nomenclature statut
-        # field_value = 'Unpublished'
-        # if self.PNTaxa.published:
-        #     field_value = 'Published'
-        #field_value = str(self.PNTaxa.published)
-        
         self.fill_parent_comboBox()
         self.taxaLineEdit_setdata()
         self.input_name = self.window.taxaLineEdit.text()
-        #self.save_input_state()
 
     def fill_parent_comboBox(self):
         self.tab_parent_comboBox =[]
         id_rankparent = commons.get_dict_rank_value(self.PNTaxa.id_rank,'id_rankparent')
-        sql_query = "SELECT id_taxonref, taxaname, coalesce(authors,'')::text authors FROM taxonomy.taxa_names"
-        sql_query += "\nWHERE id_rank >=" + str(id_rankparent)
-        sql_query += "\nAND id_rank <" + str(self.PNTaxa.id_rank)
-        sql_query += "\n ORDER BY taxaname"
+        sql_query = f"""SELECT 
+                            id_taxonref, 
+                            taxaname, 
+                            coalesce(authors,'')::text authors 
+                        FROM 
+                            taxonomy.taxa_names
+                        WHERE 
+                            id_rank >= {id_rankparent}
+                        AND
+                            id_rank < {self.PNTaxa.id_rank}
+                        ORDER 
+                            BY taxaname
+                    """
+        # sql_query = "SELECT id_taxonref, taxaname, coalesce(authors,'')::text authors FROM taxonomy.taxa_names"
+        # sql_query += "\nWHERE id_rank >=" + str(id_rankparent)
+        # sql_query += "\nAND id_rank <" + str(self.PNTaxa.id_rank)
+        # sql_query += "\n ORDER BY taxaname"
         query = QtSql.QSqlQuery(sql_query)
         i = 0
         index = -1
@@ -1018,9 +726,7 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
             if query.value("taxaname") == self.PNTaxa.parent_name:
                 index = i
             i +=1
-        self.window.parent_comboBox.setCurrentIndex(index)
-        
-
+        self.window.parent_comboBox.setCurrentIndex(index)     
 
     def taxaLineEdit_setdata(self):
         #newparent = self.window.parent_comboBox.currentText()
@@ -1052,21 +758,6 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
                 (self.parent_name !=self.window.parent_comboBox.currentText()))        
         self.window.buttonBox.button(QDialogButtonBox.Apply).setEnabled(_apply)
         
-
-    # def save_input_state(self):
-    #     self.tab_input = []
-    #     # self.tab_input.append(self.window.parentComboBox.currentText())
-    #     self.tab_input.append(self.window.parent_comboBox.currentText())
-    #     self.tab_input.append(self.window.basenameLineEdit.text())
-    #     self.tab_input.append(self.window.authorsLineEdit.text())
-    #     self.tab_input.append(self.window.publishedComboBox.currentText())
-
-    def str_query_value(self, query_value):
-        if query_value is None:
-            return ''
-        else:
-            return str(query_value)
-
     def close(self):
         self.window.close()
         
@@ -1080,43 +771,34 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
         newauthors = self.window.authorsLineEdit.text().strip()
         str_newidparent = str(self.tab_parent_comboBox[self.window.parent_comboBox.currentIndex()])
         # str_newidrank = str(self.data_rank[self.window.rankComboBox.currentIndex()])
-        
-        sql_query = "SELECT id_taxonref, taxaname, coalesce(authors,'') as authors, id_rank"
-        sql_query += f"\nFROM taxonomy.pn_taxa_edit ({str_idtaxonref}, '{newbasename}', '{newauthors}', {str_newidparent}, NULL, '{str(published)}', TRUE)"
-        # sql_query = sql_query.replace ("_idtaxonref", str_idtaxonref)
-        # sql_query = sql_query.replace ("_basename", newbasename)
-        # sql_query = sql_query.replace ("_authors", newauthors)
-        # sql_query = sql_query.replace ("_newidparent", str_newidparent)       
-        # # sql_query = sql_query.replace ("_idparent", str_newidparent)
-        # # sql_query = sql_query.replace ("_idrank", str_newidrank)
-        # sql_query = sql_query.replace ("_published", str(published))
+        sql_query = f"""
+                    SELECT 
+                        id_taxonref, 
+                        taxaname, 
+                        coalesce(authors,'') as authors, 
+                        id_rank
+                    FROM 
+                        taxonomy.pn_taxa_edit ({str_idtaxonref}, '{newbasename}', '{newauthors}', {str_newidparent}, NULL, '{str(published)}', TRUE)       
+        """
         #print (sql_query)
         result = QtSql.QSqlQuery (sql_query)
         code_error = result.lastError().nativeErrorCode ()
         if len(code_error) == 0:
-
         #fill tlview with query result
             self.updated_datas = []
-            #i = 0
             while result.next():
                 item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
                               result.value("id_rank"), published)
                 self.updated_datas.append(item)
-                #i +=1
             self.input_name = self.window.taxaLineEdit.text()
             self.parent_name = self.window.parent_comboBox.currentText()
             self.apply_signal.emit(self.updated_datas)
             self.taxaLineEdit_setdata()
             self.updated = True
             return True
-        # elif code_error == '23505':
-        #     msg = "Error: Duplicate key value violates unique constraint"
-        #     msg +="\n\nThe name: " + self._taxaname + " already exist in the taxonomic namespace"
         else:
             msg = commons.postgres_error(result.lastError())
-            #msg += "\n\n" + result.lastError().text()
-        QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)
-        
+        QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)        
         return self.updated
 
     def show(self):
@@ -1128,7 +810,7 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
         super().__init__()
         self.PNTaxa = myPNTaxa
         self.merge = merge
-        self.window = uic.loadUi("pn_movetaxa.ui")
+        self.window = uic.loadUi("ui/pn_movetaxa.ui")
         model = QtGui.QStandardItemModel()
         #tab_header = []
         #tab_header.append('Current Taxa name')
@@ -1162,8 +844,6 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
 
         #check for mode
         if self.merge:
-
-            
             self.idrankmin = self.PNTaxa.id_rank
             self.idrankmax = self.PNTaxa.id_rank + 1
             self.parent = self.PNTaxa.taxaname
@@ -1174,7 +854,6 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
             self.window.toLabel.setText("With")
             self.comboBox_taxa_setdata()
         else: #Move
-
             self.idrankmin = self.PNTaxa.id_rankparent
             self.idrankmax = self.PNTaxa.id_rank
             self.window.setWindowTitle("Move reference")
@@ -1183,7 +862,7 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
             self.window.taxaLineEdit.setText(self.PNTaxa.taxonref)
             #self.window.comboBox_taxa.activated.connect(self.set_newtaxanames) 
             self.comboBox_taxa_setdata()
-
+        self.window.setMaximumHeight(1)
     @property
     def selecteditem(self):
         index = self.window.comboBox_taxa.currentIndex()
@@ -1207,11 +886,11 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
     #     model.item(0,1).setText(txt_value)
         
     #return a str value (change None in '')
-    def str_query_value(self, query_value):
-        if str(query_value).lower() in ['','null']:
-            return ''
-        else:
-            return str(query_value)
+    # def str_query_value(self, query_value):
+    #     if str(query_value).lower() in ['','null']:
+    #         return ''
+    #     else:
+    #         return str(query_value)
 
     def set_newtaxanames(self):
         index = self.window.comboBox_taxa.currentIndex()
@@ -1265,8 +944,6 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
         #self.sql_query_save = sql_query
         return sql_query
 
-        
-
     def comboBox_taxa_setdata(self):
         str_minidrank = str(self.idrankmin)
         str_maxidrank = str(self.idrankmax)
@@ -1317,13 +994,275 @@ class PN_move_taxaname(QtWidgets.QMainWindow):
         QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)
 
         return self.updated
-        
-
 
     def show(self):
         self.window.show()
         self.window.exec_()
 
+
+
+
+class PNSynonym(object):
+    def __init__(self, synonym = None, taxonref = None, idtaxonref = 0, category = 'Orthographic'):
+        self.synonym = synonym
+        self.category = category
+        self.taxon_ref = taxonref
+        self.id_taxonref = idtaxonref
+        self.keyname =''
+
+    @property
+    def idtaxonref(self):
+        try:
+            return int(self.id_taxonref)
+        except Exception:
+            return 0
+
+    @property
+    def resolved(self):
+        #return True if idtaxonref>0 
+        return self.idtaxonref > 0  
+
+    # @property
+    # def cleaned_name(self):
+    #     if len(self.keyname) == 0:
+    #         sql_query = "SELECT taxonomy.pn_taxa_keyname('__taxaname__') AS keyname"
+    #         sql_query = sql_query.replace("__taxaname__", self.taxon_ref)
+    #         query = QtSql.QSqlQuery (sql_query)
+    #         if query.next():
+    #             self.keyname = query.value('keyname')
+    #     return self.keyname
+
+#####################
+#Class to edit(New or update) synonym
+# add/update a new synonym to a idtaxonref or search for a idtaxonref (PN_TaxaSearch) according to a synonym 
+# class PN_edit_synonym (QtWidgets.QWidget):
+#     button_click = pyqtSignal(object, int)
+#     def __init__(self, myPNSynonym):
+
+#         super().__init__()
+#         self.ui_addname = uic.loadUi("ui/pn_editname.ui")
+#         self.Qline_name = self.ui_addname.name_linedit
+#         self.Qline_ref = self.ui_addname.taxaLineEdit
+#         self.Qcombobox = self.ui_addname.comboBox
+#         buttonbox = self.ui_addname.buttonBox
+#         self.button_cancel = buttonbox.button(QtWidgets.QDialogButtonBox.Cancel)
+#         self.button_ok = buttonbox.button(QtWidgets.QDialogButtonBox.Ok)
+#         self.myPNSynonym = myPNSynonym
+#         self.treeview_searchtaxa = PN_TaxaSearch()
+#         self.is_new = (self.myPNSynonym.synonym is None or self.myPNSynonym.idtaxonref == 0)
+
+
+#     def setting_ui(self):
+#         self.updated = False
+#         self.Qline_name.setReadOnly(not self.myPNSynonym.resolved)
+#         self.Qline_name.setText('') 
+#         self.ui_addname.setMaximumHeight(500)
+#         self.ui_addname.resize(500,500)
+#         self.Qcombobox.setCurrentText(str(self.myPNSynonym.category))
+#         self.Qline_name.setText(self.myPNSynonym.synonym)
+#         #resolved depends if idtaxonref is Null
+#         if not self.myPNSynonym.resolved:
+#             self.ui_addname.label_tip.setText('Select Reference...')
+#             #add the treeview_searchtaxa = Class PN_TaxaSearch() (cf. taxa_model.py)
+#             layout = self.ui_addname.QTreeViewSearch_layout
+#             layout.addWidget(self.treeview_searchtaxa)
+#             self.treeview_searchtaxa.setText(self.myPNSynonym.synonym)
+#             self.treeview_searchtaxa.selectionChanged.connect(self.valid_newname)
+#         else: #idtaxonref is not Null
+#             if self.is_new:
+#                 self.ui_addname.label_tip.setText('New Synonym...')
+#             else:
+#                 self.ui_addname.label_tip.setText('Edit Synonym...')
+#             self.Qline_ref.setText(self.myPNSynonym.taxon_ref)
+#             self.ui_addname.setMaximumHeight(1)
+#             self.Qline_name.setFocus()
+#         self.Qline_name.textChanged.connect (self.valid_newname)
+#         self.Qcombobox.activated.connect(self.valid_newname)
+#         self.button_ok.clicked.connect (self.accept) 
+#         self.button_cancel.clicked.connect (self.close)
+#         self.valid_newname()
+
+#     def show(self):
+#         self.setting_ui()
+#         self.ui_addname.show()
+#         self.ui_addname.exec()
+        
+#     def close(self):
+#         self.ui_addname.close()
+
+#     def valid_newname(self):
+#         txt_item = self.Qline_name.text().strip()
+#         txt_category = self.Qcombobox.currentText().strip()         
+#         flag = False
+#         if len(txt_item)>3:
+#             if self.myPNSynonym.resolved:
+#                 flag = not (self.myPNSynonym.synonym == txt_item and self.myPNSynonym.category == txt_category)
+#             else:
+#                 new_taxonref = self.treeview_searchtaxa.selectedTaxonRef()
+#                 flag = new_taxonref is not None
+#                 self.Qline_ref.setText(new_taxonref)
+#         self.button_ok.setEnabled(flag)
+
+#     def accept(self):
+#         self.updated = False
+#         new_synonym = self.Qline_name.text().strip()
+#         new_category = self.Qcombobox.currentText()
+#         new_taxonref = self.Qline_ref.text().strip()
+#         #is_new = True
+#         if self.myPNSynonym.resolved:
+#             idtaxonref = self.myPNSynonym.idtaxonref
+#             #is_new = (self.myPNSynonym.synonym is None)
+#         else:
+#             try :
+#                 idtaxonref = int(self.treeview_searchtaxa.selectedTaxaId())
+#             except Exception:
+#                 idtaxonref = 0
+#         if idtaxonref == 0:
+#             return
+#         if self.is_new:
+#             #add mode
+#             sql_query = f"SELECT taxonomy.pn_names_add ('{new_synonym}','{new_category}', '{idtaxonref}')"
+#         else:
+#             #edit mode
+#             #return if nothing has changed
+#             if new_synonym == self.myPNSynonym.synonym and new_category == self.myPNSynonym.category:
+#                 self.ui_addname.close()
+#                 return True
+#             sql_query = f"SELECT taxonomy.pn_names_update ('{self.myPNSynonym.synonym}','{new_synonym}', '{new_category}')"
+#         #execute query
+#         result = QtSql.QSqlQuery (sql_query)
+#         #check for errors code (cf. postgresql function taxonomy.pn_taxa_edit_synonym)
+#         code_error = result.lastError().nativeErrorCode ()
+#         msg = ''
+#         if len(code_error) == 0:
+#             self.myPNSynonym.synonym = new_synonym
+#             self.myPNSynonym.category = new_category
+#             self.myPNSynonym.taxon_ref = new_taxonref                                    
+#             self.myPNSynonym.id_taxonref = idtaxonref
+#             self.ui_addname.close()
+#             self.updated = True
+#             return True
+#         else:
+#             msg = commons.postgres_error(result.lastError())
+#         QtWidgets.QMessageBox.critical(self.ui_addname, "Database error", msg, QtWidgets.QMessageBox.Ok)
+#         return False
+
+
+
+#class to display a search widget composed of a search text and and treeview result with  matched taxa and score
+# class PN_TaxaSearch(QWidget):
+#     selectionChanged = pyqtSignal(str)
+#     doubleClicked = pyqtSignal(object)
+#     def __init__(self, parent=None):
+#         super().__init__(parent)
+#         # load the GUI
+#         self.lineEdit_search_taxa = QLineEdit(self)
+#         self.treeview_scoretaxa = QTreeView(self)
+#         self.lineEdit_search_taxa.setPlaceholderText("search taxa")
+#         self.treeview_scoretaxa.setEditTriggers(QTreeView.NoEditTriggers)
+#         #set the model
+#         self.model = QtGui.QStandardItemModel()
+#         self.model.setColumnCount(2)
+#         self.treeview_scoretaxa.setModel(self.model)
+#         self.treeview_scoretaxa.setHeaderHidden(True)
+#         #connect slots
+#         self.treeview_scoretaxa.selectionModel().selectionChanged.connect(self.on_selection_changed)
+#         self.treeview_scoretaxa.doubleClicked.connect(self.on_doubleClicked)
+#         self.lineEdit_search_taxa.textChanged.connect(self.on_text_changed)
+#         # set the layout
+#         layout = QVBoxLayout()
+#         layout.addWidget(self.lineEdit_search_taxa)
+#         layout.addWidget(self.treeview_scoretaxa)
+#         self.setLayout(layout)
+    
+#     def setText(self, newtext):
+#         self.lineEdit_search_taxa.setText(newtext)
+
+#     def currentIndex(self):
+#         return self.treeview_scoretaxa.currentIndex()
+    
+#     def selectedTaxa(self):
+#         return self.treeview_scoretaxa.currentIndex().siblingAtColumn(0).data()
+    
+#     def selectedTaxonRef(self):
+#         parent = self.treeview_scoretaxa.currentIndex().parent()
+#         if parent.isValid():
+#             return parent.data()
+#         else:
+#             return self.treeview_scoretaxa.currentIndex().data()
+        
+#     def selectedTaxaId(self):
+#         parent = self.treeview_scoretaxa.currentIndex().parent()
+#         if parent.isValid():
+#             return parent.data(Qt.UserRole)
+#         else:
+#             return self.treeview_scoretaxa.currentIndex().data(Qt.UserRole)
+    
+#     def selectedScore(self):
+#         return self.treeview_scoretaxa.currentIndex().siblingAtColumn(1).data()
+    
+#     def on_selection_changed(self, selected):
+#         index = selected.indexes()[0] if selected.indexes() else None
+#         if index:
+#             selected_item = index.data()
+#             self.selectionChanged.emit(selected_item)  # Emit the slot selected_item
+            
+#     def on_doubleClicked(self, index):
+#         self.doubleClicked.emit(index)  # Emit the slot selected_item
+
+#     def on_text_changed(self):
+#         #"main" function to search for taxa resolution
+#         self.model.clear()
+#         search_txt = self.lineEdit_search_taxa.text()
+#         _score = 0.4
+#         #exlude search according to number of characters
+#         if len(search_txt) < 4:
+#             return
+#         if len(search_txt) < 8:
+#             _score = 0.2
+#         #create sql query
+#         sql_query = f"""
+#             SELECT 
+#                 a.taxonref, a.score, a.id_taxonref, c.name AS synonym
+#             FROM 
+#                 taxonomy.pn_taxa_searchname('{search_txt}', {_score}::numeric) a 
+#             INNER JOIN 
+#                 taxonomy.taxa_nameset c 
+#             ON 
+#                 a.id_taxonref = c.id_taxonref AND c.category <> 1
+#             ORDER 
+#                 BY score DESC, synonym ASC
+#         """
+#         #print (sql_query)
+#         query = QtSql.QSqlQuery (sql_query)
+#         dict_nodes = {}
+#         tab_header = ['taxonref', 'score']
+#         while query.next():
+#             id_taxonref = query.value('id_taxonref')
+#             if id_taxonref in dict_nodes:
+#                 ref_item = dict_nodes[id_taxonref]
+#             else:
+#                 #create the node if not already existed
+#                 ref_item = [QtGui.QStandardItem(str(query.value(x))) for x in tab_header]
+#                 ref_item[0].setData(id_taxonref, Qt.UserRole)
+#                 ref_item[1].setTextAlignment(Qt.AlignCenter)
+#                 self.model.appendRow(ref_item)
+#                 dict_nodes[id_taxonref] = ref_item
+#                 #set score in red if below 50
+#                 if query.value('score') < 50:
+#                     _color =  QtGui.QColor(255, 0, 0)
+#                     ref_item[1].setData(QtGui.QBrush(_color), Qt.ForegroundRole)
+#             if query.value('synonym'):
+#                 ref_item[0].appendRow ([QtGui.QStandardItem(query.value('synonym'))])
+                
+#         if self.model.rowCount() > 0:
+#             self.treeview_scoretaxa.resizeColumnToContents(1)
+#             self.treeview_scoretaxa.setExpanded(self.model.index(0, 0), True)
+#             self.treeview_scoretaxa.header().setStretchLastSection(False)
+#             self.treeview_scoretaxa.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+#             self.treeview_scoretaxa.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
+        
+# # 
 
 #class to display a treeview with hiercharchical taxonomy
 # class PN_taxa_hierarchical_widget(QTreeView):
