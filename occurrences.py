@@ -5,8 +5,8 @@ from PyQt5.QtGui import QStandardItem
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QItemSelectionModel, pyqtSignal
 
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect
-from core.functions import get_str_value, list_db_fields, list_db_traits,postgres_error
-from models.synonyms import PNSynonym, PN_edit_synonym
+from core.functions import list_db_fields, list_db_traits, get_str_value, postgres_error
+from models.taxa_model import PNSynonym, PN_edit_synonym
 from models.occ_model import PN_taxa_resolution_model, PN_occ_model, PN_occ_tables, PN_occ_explore
 
 from import_csv import NonEditableModel, ComboBoxDelegate, CSVTranslate
@@ -14,6 +14,12 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 #import pandas as pd
 import re
+
+
+
+
+
+
 
 class DataThread():
     data_ready = pyqtSignal(list)
@@ -57,7 +63,6 @@ class DataThread():
                 i = 0
                 break
         self.model.resetdata(self.data)
-
 
 class CenterDelegate(QtWidgets.QStyledItemDelegate):
     def paint(self, painter, option, index):
@@ -301,7 +306,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #load the users dataset from dbconfig
         model = QtGui.QStandardItemModel()
         model.setColumnCount(3)
-        sql_query = "SELECT name, parameter2, uuid FROM config_start WHERE key = 'dbdataset' AND parameter1 = '" + self.trView_occ.schema + "'"
+        sql_query = f"SELECT name, parameter2, uuid FROM config_start WHERE key = 'dbdataset' AND parameter1 = '{self.trView_occ.schema}'"
         query = dbconfig.exec_(sql_query)
         while query.next():
             item =  QtGui.QStandardItem(str(query.value("name")))

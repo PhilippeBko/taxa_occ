@@ -3,14 +3,10 @@ import json
 import requests
 import time
 import re
-import core.functions as commons
-
+from core import functions as commons
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
 from bs4 import BeautifulSoup
-#from datetime import datetime
-#from taxa_model import PNTaxa
-##import abc
 
 class TaxRefThread (QThread):
     #rowSearch_Signal = pyqtSignal(str, str, str)
@@ -66,9 +62,9 @@ class TaxRefThread (QThread):
             self.Result_Signal.emit(str(base), _json)
             if len(_json["url"]) * len(_json["name"]) > 0:
                 _list_api[base] = _json
-            if self.status == 0 : 
+            if self.status == 0 :
                 return
-            time.sleep(0.3)
+            time.sleep(0.2)
         self.Result_Signal.emit("END", _list_api)
 
 ##___class API_Abstract________________________
@@ -94,7 +90,6 @@ class API_Abstract ():
         self.list_field = {"name":'',"url":'', "webpage":''}
         self.ls_children = []
 
-    """Abstract class"""
     def translate_rank(self, _rank):
         #return the standard name for a rank
         try:
@@ -104,15 +99,20 @@ class API_Abstract ():
             _rank = _rank.lower()
         except Exception:
             pass
-        if _rank in self.rank_translate.keys():
-            return _rank.capitalize()
-        else:
-            for key, value in self.rank_translate.items():
-                if _rank in value:
-                    return key.capitalize()
+        for key, value in self.rank_translate.items():
+            if _rank in [key]+ value:
+                return key.capitalize()
+        
+        # if _rank in self.rank_translate.keys():
+        #     return _rank.capitalize()
+        # else:
+        #     for key, value in self.rank_translate.items():
+        #         if _rank in value:
+        #             return key.capitalize()
         return 'Unknown'
    
     def api_response (self, _url, _timeout=2, _json = True):
+    #send a request to the server and return the response (_json or text formated) waiting for a timeout
         try:
             _response = requests.get(_url, timeout=_timeout)
             if _json:
@@ -145,7 +145,7 @@ class API_Abstract ():
 ##################################################################################
 
 ##################################################################################
-##___FLORICAL access class based on API_Abstract________________________
+##___FLORICAL access class based on API_Abstract, using scrapping of the web page (no API service)________________________
 class API_FLORICAL(API_Abstract):
     #dict_rank =  {0 : '', 10 : 'Family', 14 : 'Genus', 21 : 'Species', 22 : 'subSpecies', 23 : 'Variety', 31 : 'Species'}  
     def __init__(self, myPNTaxa = None):
@@ -201,16 +201,8 @@ class API_FLORICAL(API_Abstract):
             self.family = tab_taxa[0]
             self.taxaname = self.tab_result["Taxa name"]
             
-            
-            
     def get_metadata(self):
-            #return nothing if the ranks are different (to avoid errors due to a scheme in \
-            # florical returning for example a species for an input family is there is only one species in the family
-            # ex: ask for genus 'Abrus', return the details of species 'Abrus precatorius')
-        # try:
-        #     _rank = self.tab_result["ui_taxon"]
-        # except:
-        #         return #self.list_field
+    #return a formated dict with taxonomic data
         tab_taxon = commons.get_dict_from_species(self.taxaname)
         if tab_taxon is None: 
             return
@@ -247,6 +239,7 @@ class API_FLORICAL(API_Abstract):
             # self.list_field["_links"] = _links
 
     def get_synonyms(self):
+    #return the synonyms
         synonyms = self.soup.find("div", id="collapse5cf7bc681d027852d1a7cf36")
         tab_synonyms = []
         if synonyms is not None:
@@ -260,6 +253,7 @@ class API_FLORICAL(API_Abstract):
         return tab_synonyms
 
     def get_children(self):
+    #get all children from the current taxon
         #url = 'http://publish.plantnet-project.org/project/florical/search?q=' + self.myTaxa.taxaname
         _page = 1
         try:
@@ -868,7 +862,7 @@ def test_signal(base,api_json):
 
 
 if __name__ == '__main__':
-    import taxa_model
+    import models.taxa_model as taxa_model
     app=QtWidgets.QApplication(sys.argv)
     #class_taxa = PNTaxa(123,'Zygogynum pancheri subsp. rivulare', 'DC.', 22)
     class_taxa = taxa_model.PNTaxa(123,'Zygogynum bicolor', 'DC.', 21)

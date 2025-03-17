@@ -702,7 +702,7 @@ class CSVTranslate(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    with open("Diffnes.qss", "r") as f:
+    with open("ui/Diffnes.qss", "r") as f:
         #with open("Photoxo.qss", "r") as f:
         _style = f.read()
         app.setStyleSheet(_style)

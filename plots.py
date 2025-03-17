@@ -12,7 +12,7 @@ from PyQt5 import QtSql, QtGui,  uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 
 from models.occ_model import PN_taxa_resolution_model
-from models.synonyms import PNSynonym
+from models.taxa_model import PNSynonym
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaSearch
 from core.functions import (get_str_value, get_all_names, get_reference_field, postgres_error, list_db_fields, 
                            flower_reg_pattern, fruit_reg_pattern

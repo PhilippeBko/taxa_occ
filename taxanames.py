@@ -7,15 +7,28 @@ import time
 
 from PyQt5 import uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QModelIndex
-from api_thread import TaxRefThread, API_ENDEMIA
 
-from taxa_model import (TableModel, PNTaxa,  PN_add_taxaname, PN_edit_taxaname, PN_move_taxaname )
-from models.synonyms import PNSynonym, PN_edit_synonym
+from models.api_thread import TaxRefThread, API_ENDEMIA
+from models.taxa_model import (TableModel, PNTaxa,  PN_add_taxaname, PN_edit_taxaname, PN_move_taxaname, PNSynonym, PN_edit_synonym)
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView
 from core.functions import (get_dict_from_species, get_str_value, postgres_error, list_db_properties)
 ########################################
 
 class EditProperties_Delegate(QtWidgets.QStyledItemDelegate):
+    """
+    A custom delegate class for editing properties in a PN_JsonQTreeView.
+
+    This class is responsible for creating editors for specific columns in the tree view,
+    based on the type of data in the dict_properties dictionary (for the moment qlinedit and combobox)
+
+    Attributes:
+        None
+
+    Methods:
+        createEditor: Creates an editor (QLineEdit or QComboBox) for a specific column.
+        setEditorData: Sets the data for the editor.
+        setModelData: Saves the data from the editor into the model.
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -101,40 +114,41 @@ class MainWindow(QtWidgets.QMainWindow):
         selection.currentChanged.connect(self.tlview_taxonref_before_clickitem)
         
     # setting the properties treeview
-        #self.trview_identity = self.window.trview_identity
-        #self.trview_metadata = self.window.trview_metadata
-        #self.trview_names = self.window.trview_names
-        self.trView_hierarchy = PN_TaxaQTreeView () ##self.window.treeView_childs
+        self.trView_hierarchy = PN_TaxaQTreeView ()
         self.trView_hierarchy.doubleClicked.connect(self.trView_hierarchy_dblclick)
         self.window.trView_hierarchy_Layout.insertWidget(0,self.trView_hierarchy)
 
-    # setting the combo
+    # setting the combos
         self.combo_taxa = self.window.combo_taxa
         self.combo_taxa.addItem('Any taxa')
         self.combo_taxa.setItemData(0, PNTaxa(0, 'Any taxa', '', 0), role=Qt.UserRole)
         self.combo_taxa.setCurrentIndex(0)
-        self.combo_taxa.currentIndexChanged.connect(self.tlview_taxonref_setData)
 
         self.combo_status = self.window.combo_status
         self.combo_habit = self.window.combo_habit
         self.combo_rank = self.window.combo_rank
         for x in self.dict_rank.keys():
             self.combo_rank.addItem(x)
-        self.combo_rank.activated.connect(self.tlview_taxonref_setData)
 
         self.combo_status.addItem("Any status")
         for x in list_db_properties["new caledonia"]["status"]["items"]:
             self.combo_status.addItem(x)
         self.combo_status.addItem("Unknown")
-        self.combo_status.activated.connect(self.tlview_taxonref_setData)
         
         self.combo_habit.addItem("Any habit")
         for x in list_db_properties["habit"].keys():
             self.combo_habit.addItem(x.title())
         self.combo_habit.addItem("Unknown")
-        self.combo_habit.activated.connect(self.tlview_taxonref_setData)
 
-    # setting the buttons slots
+    # setting the linedit_search
+        self.lineEdit_search = self.window.lineEdit_search
+    # setting the buttons
+        self.button_reset = self.window.buttonBox_metadata.button(QtWidgets.QDialogButtonBox.Reset)
+        self.buttonbox_identity = self.window.buttonBox_identity
+        button_cancel = self.buttonbox_identity.button(QtWidgets.QDialogButtonBox.Cancel)
+        button_apply = self.buttonbox_identity.button(QtWidgets.QDialogButtonBox.Apply)
+
+    # setting the buttons and linedit slots
         #self.window.pushButtonRefresh.clicked.connect(self.button_metadata_refresh)
         self.window.button_clean.clicked.connect(self.button_clean_click)    
         self.window.pushButtonAdd.clicked.connect(self.button_add_synonym)
@@ -145,21 +159,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window.button_delNames.clicked.connect(self.button_delNames_click)
         self.window.pushButtonMergeChilds.clicked.connect(self.button_MergeChilds_click)
         self.window.pushButtonMoveChilds.clicked.connect(self.button_MoveChilds_click)
-        
-        self.button_reset = self.window.buttonBox_metadata.button(QtWidgets.QDialogButtonBox.Reset)
         self.button_reset.clicked.connect (self.button_metadata_refresh)
-
-        self.buttonbox_identity = self.window.buttonBox_identity
-        button_cancel = self.buttonbox_identity.button(QtWidgets.QDialogButtonBox.Cancel)
         button_cancel.clicked.connect (self.button_identity_cancel_click)
-        button_apply = self.buttonbox_identity.button(QtWidgets.QDialogButtonBox.Apply)
         button_apply.clicked.connect(self.button_identity_apply_click)
-        
-        self.lineEdit_search = self.window.lineEdit_search
         self.lineEdit_search.returnPressed.connect(self.tlview_taxonref_setData)
-
-        self.tab_data = self.window.tab_data
-        #self.tab_data.currentChanged.connect(self.tab_data_changed)
+        self.combo_habit.activated.connect(self.tlview_taxonref_setData)
+        self.combo_status.activated.connect(self.tlview_taxonref_setData)
+        self.combo_rank.activated.connect(self.tlview_taxonref_setData)
+        self.combo_taxa.currentIndexChanged.connect(self.tlview_taxonref_setData)
+        #self.tab_data = self.window.tab_data
     #set the toolbox icon style
         self.window.toolBox.setItemText(0, "< no selection >")
         self.window.toolBox.setItemIcon(0, self.window.style().standardIcon(51))
@@ -171,7 +179,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rank_msg.setGeometry(100, 40, 30, 25)
         self.rank_msg.setVisible(True)
         self.window.statusbar.addPermanentWidget(self.rank_msg)
-
     #connect to the database
         connected_indicator = PN_DatabaseConnect()
         self.window.statusBar().addPermanentWidget(connected_indicator)
@@ -180,31 +187,30 @@ class MainWindow(QtWidgets.QMainWindow):
         if not connected_indicator.dbopen:
             return
         self.db = connected_indicator.db
-
-        #connect the treeview of properties
+    #connect the treeview of properties (identity, metadata and names)
         self.PN_trview_identity = PN_JsonQTreeView ()
+        self.PN_tlview_metadata = PN_JsonQTreeView ()
+        self.PN_tlview_names = PN_JsonQTreeView ()
+    #insert the  treeview in the three layout
         layout = self.window.toolBox.widget(0).layout()
-        layout.insertWidget(0,self.PN_trview_identity)
+        layout.insertWidget(0,self.PN_trview_identity)        
+        layout = self.window.toolBox.widget(1).layout()
+        layout.insertWidget(0,self.PN_tlview_metadata)
+        layout = self.window.toolBox.widget(2).layout()
+        layout.insertWidget(0,self.PN_tlview_names)
+    #set delegate for editing properties of PN_trview_identity
         self.delegate = EditProperties_Delegate()
         self.PN_trview_identity.setItemDelegate(self.delegate)
         self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.CurrentChanged)
-
-        self.PN_tlview_metadata = PN_JsonQTreeView ()
-        layout = self.window.toolBox.widget(1).layout()
-        layout.insertWidget(0,self.PN_tlview_metadata)
-        
-
-        self.PN_tlview_names = PN_JsonQTreeView ()
-        layout = self.window.toolBox.widget(2).layout()
-        layout.insertWidget(0,self.PN_tlview_names)
-        
-        #connect the thread
-        self.metadata_worker = TaxRefThread(app)
-        #connect signals
+    #connect signals
         self.PN_tlview_names.changed_signal.connect(self.trview_names_changed)
-        self.PN_trview_identity.changed_signal.connect(self.trview_identity_changed)
-        self.metadata_worker.Result_Signal.connect(self.trview_metadata_setDataAPI)   
+        self.PN_trview_identity.changed_signal.connect(self.trview_identity_changed)        
+    #connect the thread
+        self.metadata_worker = TaxRefThread(app)
+        self.metadata_worker.Result_Signal.connect(self.trview_metadata_setDataAPI)        
+    #initialize the tlview_taxonref (list of taxa)
         self.tlview_taxonref_setData()
+
 
         self.window.pushButton.clicked.connect(self.test_endemia)
 
@@ -517,18 +523,26 @@ class MainWindow(QtWidgets.QMainWindow):
             sql_join = f"\nINNER JOIN taxonomy.pn_taxa_childs ({idtaxonref},True) b ON a.id_taxonref = b.id_taxonref"
         sql_query = f"""
                     SELECT
-                        a.taxaname::text, a.authors, a.id_rank, a.id_taxonref, a.published, score_api
+                        a.taxaname::text, 
+                        a.authors, 
+                        a.id_rank, 
+                        a.id_taxonref, 
+                        a.published, 
+                        score_api
                     FROM 
                         taxonomy.taxa_names a
                     LEFT JOIN 
                         (SELECT 
-                            id_taxonref, count(id_taxonref) as score_api
+                            id_taxonref, 
+                            count(id_taxonref) as score_api
                          FROM
                             (SELECT 
-                                id_taxonref, jsonb_each(metadata) 
+                                id_taxonref, 
+                                jsonb_each(metadata) 
                             FROM 
                                 taxonomy.taxa_reference 
-                            WHERE metadata IS NOT NULL
+                            WHERE 
+                                metadata IS NOT NULL
                             ) z
                         GROUP BY 
                             id_taxonref
