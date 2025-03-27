@@ -40,7 +40,6 @@ list_db_traits = {
                     "leaf_ldmc": {"synonyms" : ['ldmc', 'leafldmc'], "type" : "numeric", "unit" : 'mg/g', "plot" :"hist", "min": 10, "max": 1000, "tip": 'Leaf Dry Matter Content'},
                     "leaf_thickness": {"synonyms" : ['leafthickness'], "type" : "numeric", "unit" : 'µm', "plot" :"hist", "min":10, "max": 1000, "tip": 'Thickness of the leaf'},
                     "wood_density": {"synonyms" : ['wd', 'wood_dens'],"type" : "numeric", "unit" : 'g/cm3', "plot" :"hist", "min": 0.1, "max": 2, "decimal": 5, "tip": 'Density of a wood core'},
-
                     "leaf_dry_weight": {"synonyms" : ['leafdryweight', 'dryleafmass', 'leafdrymatter', 'leaf_dry_weight_mg'],"type" : "numeric", "unit" : 'mg', "plot" :"hist", "min": 1, "max": 100000, "decimal": 2, "tip": 'Weight of a dry leaf unit'},
                     "leaf_fresh_weight": {"synonyms" : ['leaffreshweight', 'freshleafmass', 'leaffreshmatter', 'leaf_fresh_weight_mg'],"type" : "numeric", "unit" : 'mg', "plot" :"hist", "min": 10, "decimal": 2, "tip": 'Weight of a fresh leaf unit'},
                     "wood_core_diameter": {"synonyms" : ['core_diameter', 'core_diameter_mm', 'woodcorediameter'],"type" : "numeric", "unit" : 'mm', "plot" :"hist", "decimal": 3, "tip": 'Diameter of the wood core'},
@@ -169,18 +168,21 @@ def get_str_value (value):
     else:
         return ''
     
-def get_dict_rank_value(idrank, key = None):
-    #return data from ranks, load the table as a Json
+def get_dict_rank_value(key, field = None):
+    #return data from ranks
+    # if empty, load the table as a Json with id_rank and rank_name as main keys
     if len (RANK_TYPOLOGY) == 0:
-        sql_query = "SELECT id_rank, row_to_json(t) json_row FROM (SELECT id_rank, rank_name, id_rankparent, suffix, prefix FROM taxonomy.taxa_rank ORDER BY id_rank) t"
+        sql_query = "SELECT id_rank, rank_name, row_to_json(t) json_row FROM (SELECT id_rank, rank_name, id_rankparent, suffix, prefix FROM taxonomy.taxa_rank ORDER BY id_rank) t"
         query = QtSql.QSqlQuery(sql_query)
         while query.next():
             RANK_TYPOLOGY[query.value("id_rank")] = json.loads(query.value("json_row"))
-    if idrank in RANK_TYPOLOGY:
-        if key is None:
-            return RANK_TYPOLOGY[idrank].copy()
+            RANK_TYPOLOGY[query.value("rank_name")] = json.loads(query.value("json_row"))
+    #return the dict_rank from key or field is not None
+    if key in RANK_TYPOLOGY:
+        if field is None:
+            return RANK_TYPOLOGY[key].copy()
         else:
-            return RANK_TYPOLOGY[idrank][key]
+            return RANK_TYPOLOGY[key][field]
 
 def get_dict_from_species(_taxa):
     #return a taxa dictionnary of properties from a _taxa string

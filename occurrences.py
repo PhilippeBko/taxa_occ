@@ -1,5 +1,7 @@
 #import os
 import sys
+import re
+
 from PyQt5 import QtWidgets, uic, QtGui, QtSql, QtCore
 from PyQt5.QtGui import QStandardItem
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QItemSelectionModel, pyqtSignal
@@ -13,7 +15,6 @@ from import_csv import NonEditableModel, ComboBoxDelegate, CSVTranslate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 #import pandas as pd
-import re
 
 
 

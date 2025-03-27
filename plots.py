@@ -1,23 +1,25 @@
 #external modules
-import sys
-import copy
-import re
-import json
 import os
+import sys
+import re
+import copy
+import json
 import csv
+import math
 
-import math as mt
 import pandas as pd
-from PyQt5 import QtSql, QtGui,  uic, QtWidgets, QtCore
-from PyQt5.QtCore import Qt
 
+from PyQt5 import uic, QtWidgets, QtCore, QtSql, QtGui
+from PyQt5.QtCore import Qt
+########################################
 from models.occ_model import PN_taxa_resolution_model
 from models.taxa_model import PNSynonym
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaSearch
 from core.functions import (get_str_value, get_all_names, get_reference_field, postgres_error, list_db_fields, 
                            flower_reg_pattern, fruit_reg_pattern
                            )
-#from class_synonyms import PNSynonym
+########################################
+
 
 #default parameters
 PLOT_DEFAULT_DECIMAL = 2
@@ -41,7 +43,7 @@ dict_db_plot = {
                 "width": {"value" : None, "type" : 'numeric'},
                 "radius": {"value" : None, "type" : 'numeric', "visible": False},
                 "length": {"value" : None, "type" : 'numeric'},
-                "area" : {"value": None, "enabled": False, "visible": True}             
+                "area" : {"value": None, "type" : 'numeric', "enabled": False, "visible": True}             
                 }
 
 dict_db_tree = {
@@ -387,10 +389,19 @@ class CSVImporter(QtWidgets.QDialog):
                 if non_null_identifier:
                     #clause_in = ", ".join(tab_identifier)
                     clause_in = ", ".join(["'{}'".format(item) for item in non_null_identifier])
-                    sql_query = f"""SELECT identifier, {DBASE_SCHEMA_TREES}.id_plot, plot 
-                                    FROM {DBASE_SCHEMA_TREES} JOIN {DBASE_SCHEMA_PLOTS} 
-                                    ON {DBASE_SCHEMA_TREES}.id_plot = {DBASE_SCHEMA_PLOTS}.id_plot 
-                                    WHERE identifier IN ({clause_in})""" 
+                    sql_query = f"""SELECT 
+                                        identifier, 
+                                        {DBASE_SCHEMA_TREES}.id_plot, 
+                                        plot 
+                                    FROM 
+                                        {DBASE_SCHEMA_TREES} 
+                                    JOIN 
+                                        {DBASE_SCHEMA_PLOTS} 
+                                    ON 
+                                        {DBASE_SCHEMA_TREES}.id_plot = {DBASE_SCHEMA_PLOTS}.id_plot 
+                                    WHERE 
+                                        identifier IN ({clause_in})
+                                """ 
                     query = QtSql.QSqlQuery(sql_query)
                     self.dict_identifier_toUpdate = {}
                     while query.next():
@@ -682,12 +693,12 @@ class CSVImporter(QtWidgets.QDialog):
                         float_dbh = float(tab_stems_dbh[i])
                         if field_csv in dbh_perimeter_synonyms: #compute dbh if value is perimeter
                             field_def["details"] = f"The DBH was computed from the formula\n{field_csv}/PI"
-                            float_dbh = float_dbh/mt.pi
-                        total_area += mt.pi * (float_dbh/2)**2
+                            float_dbh = float_dbh/math.pi
+                        total_area += math.pi * (float_dbh/2)**2
                     except Exception:
                         continue
                 #compute the resulting DBH from the total area
-                field_value = 2*mt.sqrt(total_area/mt.pi)
+                field_value = 2*math.sqrt(total_area/math.pi)
             elif field_name in ['flower', 'fruit']:
                 #ok if a form of boolean
                 if import_value in ['True', 'False', True, False, 1, 0]:
@@ -955,8 +966,16 @@ class CSVImporter(QtWidgets.QDialog):
             self.rows_imported = 0
             #to create a log journal, save les id_tree et id_history max
             sql_log = """SELECT 
-                        (SELECT max(id_tree) FROM plots.trees) AS id_tree,
-                        (SELECT max(id_history) FROM plots.trees_history) AS id_history
+                            (SELECT 
+                                max(id_tree) 
+                            FROM 
+                                plots.trees
+                            ) AS id_tree,
+                            (SELECT 
+                                max(id_history) 
+                            FROM 
+                                plots.trees_history
+                            ) AS id_history
                   """
             query = QtSql.QSqlQuery(sql_log)
             query.next()
@@ -981,13 +1000,34 @@ class CSVImporter(QtWidgets.QDialog):
             win_preview.close()
 
             #to detect change
-            sql_log = f"""SELECT b.sql, a.* FROM plots.trees a INNER JOIN 
-                        (
-                            SELECT 'UPDATE' sql, id_tree FROM plots.trees_history WHERE id_history > {id_history}
+            sql_log = f"""
+                        SELECT 
+                            b.sql, 
+                            a.* 
+                        FROM 
+                            plots.trees a 
+                        INNER JOIN 
+                            (SELECT 
+                                'UPDATE' sql, 
+                                id_tree 
+                             FROM 
+                                plots.trees_history 
+                            WHERE 
+                                id_history > {id_history}
                             UNION
-                            SELECT 'INSERT' sql, id_tree FROM plots.trees WHERE id_tree > {id_tree}
-                        ) b ON a.id_tree = b.id_tree
-                        ORDER BY id_tree ASC;"""
+                            SELECT 
+                                'INSERT' sql, 
+                                id_tree 
+                            FROM 
+                                plots.trees 
+                            WHERE 
+                                id_tree > {id_tree}
+                            ) b 
+                        ON 
+                            a.id_tree = b.id_tree
+                        ORDER BY 
+                            id_tree ASC
+                    """
             query = QtSql.QSqlQuery(sql_log)
             while query.next():
                 print (query.value(0), query.value(1), query.value(2))
@@ -1029,18 +1069,34 @@ class CSVImporter(QtWidgets.QDialog):
         list_str_idplot = [str(key) for key in dict_imported_csv.keys() if key > 0]
         #create the sql_satement of found plots for display
         sql_query = f"""
-                        SELECT '{current_collection}' as collection, '{current_locality}' as locality, NULL AS plot, 0 AS id_plot
-                        FROM {DBASE_SCHEMA_PLOTS}
+                        SELECT 
+                            '{current_collection}' AS collection, 
+                            '{current_locality}' AS locality, 
+                            NULL AS plot, 
+                            0 AS id_plot
+                        FROM 
+                            {DBASE_SCHEMA_PLOTS}
                         UNION
-                        SELECT '{current_collection}' as collection, '{current_locality}' as locality, NULL AS plot, -1 AS id_plot
-                        FROM {DBASE_SCHEMA_PLOTS}
+                        SELECT 
+                            '{current_collection}' AS collection, 
+                            '{current_locality}' AS locality, 
+                            NULL AS plot, 
+                            -1 AS id_plot
+                        FROM 
+                            {DBASE_SCHEMA_PLOTS}
                     """
         if list_str_idplot:
                     sql_query += f"""
                         UNION
-                        SELECT collection, locality, plot, id_plot
-                        FROM {DBASE_SCHEMA_PLOTS}
-                        WHERE id_plot IN ({", ".join(list_str_idplot)})                        
+                        SELECT 
+                            collection, 
+                            locality, 
+                            plot, 
+                            id_plot
+                        FROM 
+                            {DBASE_SCHEMA_PLOTS}
+                        WHERE 
+                            id_plot IN ({", ".join(list_str_idplot)})                        
                     """
         sql_query += "\nORDER BY plot, locality, collection"
         
@@ -1152,7 +1208,7 @@ class CSVImporter(QtWidgets.QDialog):
 
 
 ###MAIN WINDOWS
-#class delegate for editing in tableviews (tree and plot)
+#Class CustomDelegate is used by the MainWindow class to edit the properties of the trees and plots
 class CustomDelegate(QtWidgets.QStyledItemDelegate):
     dataChanged = QtCore.pyqtSignal(str, object)  # Signal after data is changed
     textUpdated = QtCore.pyqtSignal(str, object)  # Signal during text edition
@@ -1162,8 +1218,6 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
         self.table_def = dict_db_ncpippn
         self.currentIndex = None
         self.text_editor = None
-        
-        #self.exclude_columns = [key for key, value in self.table_def.items() if not value.get('enabled', True)]
 
     def get_header (self, index):
         #return the lower case name in the column 0
@@ -1175,8 +1229,6 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         # Paint row according to excluded columns
-        #header = self.get_header (index)
-        #enabled = self.table_def[header].get('enabled', True)
         if not self.is_enabled(index): #and not enabled: #header in self.exclude_columns:
             option = QtWidgets.QStyleOptionViewItem(option)
             self.initStyleOption(option, index)
@@ -1190,6 +1242,7 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             super().paint(painter, option, index)
     
     def handle_event (self):
+    #handle editing of text and emit textUpdated signal
         self.valid = True
         if not isinstance (self.text_editor, QtWidgets.QLineEdit):
             return
@@ -1201,19 +1254,18 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             return       
 
     def createEditor(self, parent, option, index):
+    #create the editor according to the field type
         self.valid = False
         self.currentIndex = index
         self.text_editor = None
-
         header = self.get_header (index)
         if index.column() == 0 or not self.is_enabled(index): #header in self.exclude_columns:
             return None
-    #get the field definition
+        #get the field definition
         field_def = self.table_def.get(header, {})
         if not field_def:
             return
-    
-    #create editor according to the field type
+        #create editor according to the field type
         if field_def["type"] == 'boolean':
             return
         elif "items" in field_def:
@@ -1222,8 +1274,6 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             if field_def.get("editable", False):
                 editor.setEditable(True)
                 editor.lineEdit().setFont (editor.font())
-                #editor.lineEdit().installEventFilter(self)
-
         elif field_def["type"] == 'integer':
             editor = QtWidgets.QSpinBox(parent)
             editor.setSingleStep(1)
@@ -1233,14 +1283,12 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
                 editor.setMaximum(field_def["max"])
         elif field_def["type"] == 'numeric':
             editor = QtWidgets.QDoubleSpinBox(parent)
-            editor.setMaximum(float(1E6))
-            
+            editor.setMaximum(float(1E6))          
             decimals = field_def.get("decimal", PLOT_DEFAULT_DECIMAL)
             if decimals <= 2:
                 editor.setSingleStep(1)
             else:
                 editor.setSingleStep(0.1)
-
             editor.setDecimals(decimals)
             if "min" in field_def:
                 editor.setMinimum(field_def["min"])                               
@@ -1253,17 +1301,14 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             editor = QtWidgets.QLineEdit(parent)
             editor.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             self.text_editor = editor
-
-    #set the tooltip            
+        #set the tooltip            
         _tip = field_def.get("tip", header)
         if "unit" in field_def:
             _unit = field_def["unit"]
             _tip += " (" + _unit + ")"
         if _tip != header:
             editor.setToolTip (_tip)            
-    #set the slot events
-        #     self.valid = True
-        # return editor
+        #set the slot events
         if isinstance (editor, (QtWidgets.QDoubleSpinBox, QtWidgets.QSpinBox)):
             editor.valueChanged.connect(self.handle_event)
         elif isinstance (editor, QtWidgets.QComboBox):
@@ -1272,8 +1317,8 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             editor.textChanged.connect(self.handle_event)
         return editor
 
-
     def setEditorData(self, editor, index):
+    #set the value to the editor
         value = index.data(Qt.EditRole)
         value = get_str_value(value)
         try:
@@ -1294,6 +1339,7 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
             pass
 
     def setModelData(self, editor, model, index):
+    #set the value to the model through a signal
         if not self.valid : 
             return
         header = self.get_header (index)
@@ -1321,21 +1367,10 @@ class CustomDelegate(QtWidgets.QStyledItemDelegate):
         self.dataChanged.emit(header, value)
         #model.setData(index, value, Qt.EditRole)
 
-
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect)
 
-    # def eventFilter(self, editor, event):
-    #     """Intercepte les événements de l'éditeur."""
-    #     if event.type() == event.KeyPress and event.key() == Qt.Key_Return:
-    #         # Lorsque l'utilisateur appuie sur Entrée
-    #         text = editor.currentText()
-    #         if not text.strip():  # Si le texte est vide
-    #             editor.setCurrentIndex(-1)  # Forcer une valeur vide
-    #         self.commitData.emit(editor)  # Forcer la sauvegarde des données
-    #         #self.closeEditor.emit(editor, QtWidgets.QStyledItemDelegate.NoHint)  # Fermer l'éditeur
-    #         return True  # Éviter le comportement par défaut
-    #     return super().eventFilter(editor, event)
+
 
 # Subclass QtWidgets.QMainWindow to customize your application's main window
 class MainWindow(QtWidgets.QMainWindow):
@@ -1470,7 +1505,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.comboBox_collections.setCurrentIndex(0)
 
     def export_menu(self, item):
-        #set parameters to QtWidgets.QFileDialog
+    #export data to CSV file
         options = QtWidgets.QFileDialog.Options()
         options |= QtWidgets.QFileDialog.ReadOnly
         #options |= QtWidgets.QFileDialog.DontUseNativeDialog
@@ -1518,7 +1553,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 """
         if sql:
             #print (sql)
-            query = QtSql.QSqlQuery(sql)
+            query = self.db.exec(sql)
             if query.isActive():
                 record = query.record()
                 data.append([record.fieldName(x) for x in range(record.count())])
@@ -1562,7 +1597,7 @@ class MainWindow(QtWidgets.QMainWindow):
         list_db_tree_history = []
         if id:
             #play the query and set the data to dict_user
-            query = QtSql.QSqlQuery(sql_select)
+            query = self.db.exec(sql_select)
             _tmp = dict_user
             while query.next():
                 for dbcolumn in _tmp.keys():
@@ -1790,7 +1825,6 @@ class MainWindow(QtWidgets.QMainWindow):
             
     def tableview_trees_del_items(self):
     #delete selected trees from the tableView_trees.model()
-        
         selection_model = self.ui.tableView_trees.selectionModel()
         selection_model.selectionChanged.disconnect(self.create_dict_user)
         selected_indexes = self.ui.tableView_trees.selectionModel().selectedRows()
@@ -2150,11 +2184,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 id = self.dict_user_tree["id_tree"]["value"]
                 time_updated = self.dict_user_tree["time_updated"]["value"]
                 #select historical record with an interval to ensure capture of the exact time
-                sql_query =  (
-                    f"DELETE FROM {DBASE_SCHEMA_TREES}_history"
-                    f"\nWHERE id_tree = {id} AND time_updated BETWEEN TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' - INTERVAL '0.1 second'"
-                    f"\nAND TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' + INTERVAL '0.1 second'"
-                        )
+                sql_query = f"""
+                        DELETE FROM 
+                            {DBASE_SCHEMA_TREES}_history
+                        WHERE 
+                            id_tree = {id}
+                        AND
+                            time_updated BETWEEN TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' - INTERVAL '0.1 second'
+                        AND
+                            TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' + INTERVAL '0.1 second'                        
+                    """
+                    # f"\nWHERE id_tree = {id} AND time_updated BETWEEN TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' - INTERVAL '0.1 second'"
+                    # f"\nAND TIMESTAMP '{time_updated.toString(DBASE_DATETIME_FORMAT)}' + INTERVAL '0.1 second'"
+                        
                 if not database_execute_query(sql_query) :
                     print ('Error on database delete', sql_query)
                     return
@@ -2220,10 +2262,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_collection = self.ui.comboBox_collections.currentText().lower() 
         self.statusLabel.setText('Select a ' + self.current_collection)
         #create the sql statement
-        sql_query = f"SELECT collection, locality FROM {DBASE_SCHEMA_PLOTS} \nGROUP BY collection, locality"
-        sql_query += f"\nORDER BY {self.current_collection} NULLS FIRST"
-        query = QtSql.QSqlQuery(sql_query)
- 
+        sql_query = f"""SELECT 
+                            collection, 
+                            locality 
+                        FROM 
+                            {DBASE_SCHEMA_PLOTS}
+                        GROUP BY 
+                            collection, locality
+                        ORDER BY 
+                            {self.current_collection} NULLS FIRST
+                    """
+        query = self.db.exec(sql_query) 
 
         ls_collection = ['']
         ls_localities = ['']
@@ -2328,19 +2377,30 @@ class MainWindow(QtWidgets.QMainWindow):
         #               FROM ncpippn.plots {_sqlwhere}
         #               ORDER BY plot
         #               """        
-        sql_query = f"""SELECT id_plot, plot, {', '.join(ls_columns[1:])} 
-                      FROM {DBASE_SCHEMA_PLOTS} {_sqlwhere}
-                      ORDER BY plot
-                      """
+        # sql_query = f"""SELECT id_plot, plot, {', '.join(ls_columns[1:])} 
+        #               FROM {DBASE_SCHEMA_PLOTS} {_sqlwhere}
+        #               ORDER BY plot
+        #               """
 
         #if self.ui.lineEdit_identifier.text():
             #if len (self.ui.lineEdit_identifier.text()) > 3:
-        sql_query = f"""SELECT a.id_plot, plot, {', '.join(ls_columns[1:])} 
-                FROM {DBASE_SCHEMA_PLOTS} a LEFT JOIN plots.trees b ON a.id_plot = b.id_plot {_sqlwhere}
-                GROUP BY a.id_plot, a.plot, a.locality, a.type
-                ORDER BY plot
+        sql_query = f"""
+                        SELECT 
+                            a.id_plot, 
+                            plot, 
+                            {', '.join(ls_columns[1:])} 
+                        FROM 
+                            {DBASE_SCHEMA_PLOTS} a 
+                        LEFT JOIN 
+                            plots.trees b 
+                        ON 
+                            a.id_plot = b.id_plot {_sqlwhere}
+                        GROUP BY 
+                            a.id_plot, a.plot, a.locality, a.type
+                        ORDER BY
+                            plot
                       """       
-        query = QtSql.QSqlQuery(sql_query)
+        query = self.db.exec(sql_query)
         #add the plot to the model_plots
         selected_index = None
         while query.next():
@@ -2389,6 +2449,7 @@ class MainWindow(QtWidgets.QMainWindow):
             selection.selectionChanged.connect(self.tableview_plots_selectionChanged)
     
     def get_trees_sql_where(self):
+    #construct the sql where statement for the trees table according to buttons filters
         try:
             selected_indexes = self.ui.tableView_plots.selectionModel().selectedRows()
         except Exception:
@@ -2423,98 +2484,119 @@ class MainWindow(QtWidgets.QMainWindow):
             return f"WHERE {' AND '.join(_tabtmp)}"
 
     def get_properties_json(self):
-
+    #return the json properties for the selected plots
+        #get the list of selected id_plot 
         selected_indexes = self.ui.tableView_plots.selectionModel().selectedRows()
         if not selected_indexes:
             return
-        plots = ', '.join([str(index.data(role=Qt.UserRole)) for index in selected_indexes])
-        #plots = '277, 278, 279'
+        idplots = ', '.join([str(index.data(role=Qt.UserRole)) for index in selected_indexes])
+        #get the sql query for the traits
         fieldname = ['dbh','height', 'bark_thickness', 'leaf_area', 'leaf_ldmc', 'leaf_sla', 'wood_density']
         tab_sql = []
         for item in fieldname:
             decimal = list_db_fields[item].get("decimal", PLOT_DEFAULT_DECIMAL)
             unit = list_db_fields[item].get("unit", 'NULL')
-            sql = f"""SELECT '{item}' as key, count({item}), round(avg({item}), {decimal}) as avg, 
-                      round(min ({item}), {decimal}) as min, round(max({item}), {decimal}) as max, 
-                      round(stddev({item}), {decimal}) as stddev, '{unit}' as unit
-                      FROM trees"""
+            sql = f"""SELECT 
+                        '{item}' as key, count({item}), round(avg({item}), {decimal}) as avg, 
+                        round(min ({item}), {decimal}) as min, round(max({item}), {decimal}) as max, 
+                        round(stddev({item}), {decimal}) as stddev, '{unit}' as unit
+                      FROM 
+                        trees
+                    """
             tab_sql.append(sql)
-        #add phenology, trees infos and strata
+        #get the phenology, trees infos and strata
         sql =  "SELECT 'flower' as key, count(flower) FILTER (WHERE flower), NULL, NULL, NULL, NULL, NULL FROM trees"
         tab_sql.append(sql)
         sql =  "SELECT 'fruit' as key, count(fruit) FILTER (WHERE fruit), NULL, NULL, NULL, NULL, NULL FROM trees"
         tab_sql.append(sql)
+        #get the strata distribution
+        sql ="""SELECT 
+                    'strata' as key, 
+                    count(id_tree) FILTER (WHERE lower(strata) ='understorey'), 
+                    count(id_tree) FILTER (WHERE lower(strata) ='sub-canopy'), 
+                    count(id_tree) FILTER (WHERE lower(strata) ='canopy'), 
+                    count(id_tree) FILTER (WHERE lower(strata) ='emergent'), NULL, NULL 
+                  FROM trees
+             """
+        tab_sql.append(sql)
+        #get the trees infos
         sql =  "SELECT 'trees' as key, count(id_tree), count(id_tree) FILTER (WHERE dead IS NOT True), count(DISTINCT taxaname), NULL, NULL, NULL FROM plots"
         tab_sql.append(sql)
-        sql =  """SELECT 'strata' as key, count(id_tree) FILTER (WHERE strata ='Understorey'), 
-                    count(id_tree) FILTER (WHERE strata ='Sub-canopy'), 
-                    count(id_tree) FILTER (WHERE strata ='Canopy'), 
-                    count(id_tree) FILTER (WHERE strata ='Emergent'), NULL, NULL FROM trees"""
-        tab_sql.append(sql)
-
-        #create the query
+        #get the richness properties
+        ls_idtaxonref = []
+        for item in self.ui.tblView_resolution.model()._data:
+            ls_idtaxonref.append (item.id_taxonref)
+        ls_idtaxonref = ', '.join(map(str,ls_idtaxonref))
+        sql_query = f"""
+                    SELECT
+                        'richness' as key,
+                        count(distinct id_family) as families,
+                        count(distinct id_genus) as genus,
+                        count(distinct id_species) as species,
+                        count(distinct id_infra) as infra, NULL, NULL 
+                    FROM 
+                        taxonomy.taxa_hierarchy
+                    WHERE
+                        id_taxonref IN ({ls_idtaxonref})
+                    """
+        tab_sql.append(sql_query)
+        #create the union query from tab_sql
         data_sql = " \n UNION\n".join(tab_sql)
-        plots_sql = f"WITH plots AS (SELECT * FROM plots.trees WHERE id_plot IN ({plots})),"
-        plots_sql += "\ntrees AS (SELECT * FROM plots WHERE dead IS DISTINCT FROM True),"
-        plots_sql += f"\n data AS ({data_sql})"
-        sql_query = plots_sql + """
-        	SELECT
-            jsonb_object_agg(
-                key,
-                jsonb_build_object(
-                'count', count,
-                'average', avg,
-                'min', min,
-                'max', max,
-                'stddev', stddev,
-                'unit', unit
-                )
-            ) AS result_json
-            FROM
-            data
-            """
+
+        #create the final query
+        sql_query = f"""
+                    WITH 
+                        plots AS (SELECT * FROM plots.trees WHERE id_plot IN ({idplots})),
+                        trees AS (SELECT * FROM plots WHERE dead IS DISTINCT FROM True),
+                        data AS (
+                                {data_sql}
+                                )
+                        SELECT
+                            jsonb_object_agg
+                            (
+                                key,
+                                jsonb_build_object
+                                (
+                                    'count', count,
+                                    'average', avg,
+                                    'min', min,
+                                    'max', max,
+                                    'stddev', stddev,
+                                    'unit', unit
+                                )
+                            ) AS result_json
+                        FROM
+                            data
+                    """
+
         #execute the query and get the json
-        query = QtSql.QSqlQuery(sql_query)
+        query = self.db.exec(sql_query)
         query.next()
         json_properties = query.value("result_json")
         if json_properties:
-            json_properties = json.loads(json_properties)
-            
+            json_properties = json.loads(json_properties)            
             #sort the dict to be more smart
-            dict_sort = {'richness': {}}
-            fieldname = ['trees', 'flower', 'fruit', 'strata'] + fieldname
+            dict_sort = {} #{'richness': {}}
+            fieldname = ['trees', 'richness','flower', 'fruit', 'strata'] + fieldname
             #fill the dict_sort with sorted value
             for item in fieldname:
                 dict_sort[item] = {'unit':json_properties[item]['unit'], 'count':json_properties[item]['count'], 'average':json_properties[item]['average'], 
                                    'min':json_properties[item]['min'], 'max':json_properties[item]['max'], 'stddev':json_properties[item]['stddev'] 
                                    }
-            #modify some key (del and create)
+            #modify some key names (del and create)
             dict_sort['trees']['alive'] = dict_sort['trees'].pop('average')
             dict_sort['trees']['dead'] = dict_sort['trees']['count'] - dict_sort['trees']['alive']
-            #dict_sort['trees']['taxaname'] = dict_sort['trees'].pop('min')
-            #dict_sort['trees']['taxa'] = self.ui.tblView_resolution.model().rowCount()
             
             dict_sort['strata']['emergent'] = dict_sort['strata'].pop('max')
             dict_sort['strata']['canopy'] = dict_sort['strata'].pop('min')
             dict_sort['strata']['sub-canopy'] = dict_sort['strata'].pop('count')
             dict_sort['strata']['understorey'] = dict_sort['strata'].pop('average')
-            
-            ls_idtaxonref = []
-            for item in self.ui.tblView_resolution.model()._data:
-                ls_idtaxonref.append (item.id_taxonref)
-            ls_idtaxonref = ', '.join(map(str,ls_idtaxonref))
 
-            sql_query = "SELECT count(distinct id_family) as families, "
-            sql_query += "count(distinct id_genus) as genus, "
-            sql_query += "count(distinct id_species) as species, "
-            sql_query += "count(distinct id_infra) as infra"
-            sql_query += "\nFROM taxonomy.taxa_hierarchy"
-            sql_query += f"\nWHERE id_taxonref IN ({ls_idtaxonref})"
-            query = QtSql.QSqlQuery(sql_query)
-            query.next()
-            dict_sort['richness'] = {'taxa': dict_sort['trees'].pop('min'),'families' :query.value('families'), 'genus' :query.value('genus'), 'species' :query.value('species'),
-                                    'infra' :query.value('infra')
-                                    }
+            dict_sort['richness']['taxa'] = dict_sort['trees'].pop('min')
+            dict_sort['richness']['families'] = dict_sort['richness'].pop('count')
+            dict_sort['richness']['genus'] = dict_sort['richness'].pop('average')
+            dict_sort['richness']['species'] = dict_sort['richness'].pop('min')
+            dict_sort['richness']['infra'] = dict_sort['richness'].pop('max')
             #delete key with None value
             for clef, sous_dico in dict_sort.items():
                 dict_sort[clef] = {k: v for k, v in sous_dico.items() if v is not None}
@@ -2555,20 +2637,31 @@ class MainWindow(QtWidgets.QMainWindow):
         #     """
         sql_historical = ''
         if self.ui.filter_button_historical.isChecked():
-            sql_historical = f"INNER JOIN {DBASE_SCHEMA_TREES}_history c ON a.id_tree = c.id_tree"
+            sql_historical = f"""
+                         INNER JOIN 
+                            {DBASE_SCHEMA_TREES}_history c 
+                        ON 
+                            a.id_tree = c.id_tree"""
         
-        sql_select = f"""SELECT a.id_tree, a.id_plot, a.{', a.'.join(ls_columns)} 
-                    FROM {DBASE_SCHEMA_TREES} a
-                    INNER JOIN {DBASE_SCHEMA_PLOTS} b ON a.id_plot = b.id_plot
-                    {sql_historical}
-                    {self.get_trees_sql_where()}
-                    ORDER BY {ls_columns[0]}
+        sql_select = f"""SELECT 
+                            a.id_tree, 
+                            a.id_plot, 
+                            a.{', a.'.join(ls_columns)} 
+                        FROM 
+                            {DBASE_SCHEMA_TREES} a
+                        INNER JOIN 
+                            {DBASE_SCHEMA_PLOTS} b 
+                        ON a.id_plot = b.id_plot
+                        {sql_historical}
+                        {self.get_trees_sql_where()}
+                        ORDER BY 
+                            {ls_columns[0]}
             """
         sql_select = sql_select.replace("a.plot", "b.plot")
 
 
         #load the query and fill the model
-        query = QtSql.QSqlQuery(sql_select)
+        query = self.db.exec(sql_select)
         selected_index = None
         #data = []
         while query.next():
@@ -2583,12 +2676,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 
                 if id_tree == query.value("id_tree"):
                     selected_index = item.index()
-        #set the model to the list view and connect slots
-        # nb_plots = self.ui.tableView_plots.model().rowCount()
-        # nb_plot_selected = len(self.ui.tableView_plots.selectionModel().selectedRows())
-        # self.statusLabel.setText(str(nb_plots) +" (" + str(nb_plot_selected) + ") plot(s) - "+ str(rows) + " tree(s)")
-        #model_trees.header_labels = ls_columns
-        #model_trees.resetdata(data)
+        #set the model to the list view
         self.ui.tableView_trees.setModel(proxy_model)
         
         model_trees.setHorizontalHeaderLabels(ls_columns)
@@ -2642,10 +2730,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.tblView_resolution.setModel(PN_taxa_resolution_model())
         #create sql statement from unique_taxa
         items_sql = ', '.join([f"'{item}'" for item in unique_taxa])
-        sql_query = f"SELECT * FROM {DBASE_SCHEMA_TAXONOMY}.pn_taxa_searchnames(array[{items_sql}]) a"
-        sql_query += "\nWHERE original_name IS NOT NULL ORDER BY original_name"
+        sql_query = f"""
+                    SELECT 
+                        * 
+                    FROM 
+                        {DBASE_SCHEMA_TAXONOMY}.pn_taxa_searchnames(array[{items_sql}]) a
+                    WHERE 
+                        original_name IS NOT NULL 
+                    ORDER BY 
+                        original_name
+                    """
+        #sql_query += "\nWHERE original_name IS NOT NULL ORDER BY original_name"
         data = []
-        query = QtSql.QSqlQuery (sql_query)
+        query = self.db.exec (sql_query)
         #add item as a PNsynonym class
         #set_family = set()
         while query.next():
@@ -2686,7 +2783,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.treeview_searchtaxa.setText('')
             pass
     
-
     def create_dict_user(self, refresh = True):
     #function to fill the properties pannel (plot and tree) from the selected item
         #call by slot on tableview_trees selectionChanged
@@ -2708,7 +2804,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def show_dict_user(self):
-        #print ("show_dict_user")
     #fill the the two tableViews (tree and plot) with the two dict_user (dict_user_plot and dict_user_tree)
         def fill_model(dict):
             is_changed = False
@@ -2998,17 +3093,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.show()
 
 if __name__ == '__main__':
-# connection to the database
-    # db = QtSql.QSqlDatabase.addDatabase("QPSQL")
-    # if not createConnection(db):
-    #     sys.exit("error")
     app = QtWidgets.QApplication(sys.argv)
-
     with open("ui/Diffnes.qss", "r") as f:
-        #with open("Photoxo.qss", "r") as f:
         _style = f.read()
         app.setStyleSheet(_style)
-
 
     window = MainWindow()
     window.show()

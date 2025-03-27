@@ -43,7 +43,7 @@
     </size>
    </property>
    <layout class="QGridLayout" name="gridLayout">
-    <item row="2" column="0">
+    <item row="1" column="0">
      <widget class="QSplitter" name="splitter_2">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
@@ -90,6 +90,38 @@
             <property name="spacing">
              <number>3</number>
             </property>
+            <item row="0" column="5">
+             <widget class="QComboBox" name="combo_status">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>0</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="6">
+             <widget class="QComboBox" name="combo_habit">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>100</width>
+                <height>0</height>
+               </size>
+              </property>
+             </widget>
+            </item>
             <item row="0" column="1">
              <widget class="QPushButton" name="button_clean">
               <property name="sizePolicy">
@@ -137,22 +169,6 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="5">
-             <widget class="QComboBox" name="combo_status">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>100</width>
-                <height>0</height>
-               </size>
-              </property>
-             </widget>
-            </item>
             <item row="0" column="3">
              <widget class="QComboBox" name="combo_taxa">
               <property name="sizePolicy">
@@ -178,22 +194,6 @@
               </property>
              </widget>
             </item>
-            <item row="0" column="6">
-             <widget class="QComboBox" name="combo_habit">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="minimumSize">
-               <size>
-                <width>100</width>
-                <height>0</height>
-               </size>
-              </property>
-             </widget>
-            </item>
             <item row="0" column="2">
              <widget class="QLineEdit" name="lineEdit_search">
               <property name="sizePolicy">
@@ -204,6 +204,19 @@
               </property>
               <property name="placeholderText">
                <string>search taxon</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QPushButton" name="themes_button">
+              <property name="maximumSize">
+               <size>
+                <width>100</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Themes</string>
               </property>
              </widget>
             </item>
@@ -538,7 +551,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>318</width>
+          <width>185</width>
           <height>628</height>
          </rect>
         </property>
@@ -581,7 +594,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>318</width>
+          <width>185</width>
           <height>628</height>
          </rect>
         </property>
@@ -611,8 +624,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>318</width>
-          <height>628</height>
+          <width>272</width>
+          <height>614</height>
          </rect>
         </property>
         <attribute name="label">
@@ -719,8 +732,13 @@
    </property>
    <widget class="QMenu" name="menuMenu">
     <property name="title">
-     <string>Fichier</string>
+     <string>Thèmes</string>
     </property>
+    <addaction name="actionAdaptic"/>
+    <addaction name="actionCombinear"/>
+    <addaction name="actionDiffnes"/>
+    <addaction name="actionLightstyle"/>
+    <addaction name="actionObit"/>
    </widget>
    <addaction name="menuMenu"/>
   </widget>
@@ -751,6 +769,31 @@
   <action name="actionEnregistrer">
    <property name="text">
     <string>Enregistrer</string>
+   </property>
+  </action>
+  <action name="actionAdaptic">
+   <property name="text">
+    <string>Adaptic</string>
+   </property>
+  </action>
+  <action name="actionCombinear">
+   <property name="text">
+    <string>Combinear</string>
+   </property>
+  </action>
+  <action name="actionDiffnes">
+   <property name="text">
+    <string>Diffnes</string>
+   </property>
+  </action>
+  <action name="actionLightstyle">
+   <property name="text">
+    <string>Lightstyle</string>
+   </property>
+  </action>
+  <action name="actionObit">
+   <property name="text">
+    <string>Obit</string>
    </property>
   </action>
  </widget>

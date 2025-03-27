@@ -31,11 +31,16 @@ class TaxRefThread (QThread):
             self.status = 0
 
     def run(self):
-        self.status = 1
         _list_api = {}
+        try:
+            requests.get("https://www.google.com", timeout=2)
+        except Exception:
+            self.Result_Signal.emit("NOTCONNECTED", None)
+            return
         if self.PNTaxa_model is None:
             self.Result_Signal.emit("END", None)
             return
+        self.status = 1
         for base in self.list_api:
             #check for internet connexion 
             # try:
@@ -150,8 +155,10 @@ class API_FLORICAL(API_Abstract):
     #dict_rank =  {0 : '', 10 : 'Family', 14 : 'Genus', 21 : 'Species', 22 : 'subSpecies', 23 : 'Variety', 31 : 'Species'}  
     def __init__(self, myPNTaxa = None):
         super().__init__()
-        self.myTaxa = myPNTaxa
+        self.taxaname = ''
+        self.family = '' 
         self.tab_result = {}
+        self.myTaxa = myPNTaxa
         _taxa = self.myTaxa.taxaname
         if self.myTaxa.id_rank == 31:
             _taxa = _taxa.replace(' x ', ' ' + chr(215) + ' ')
@@ -169,11 +176,10 @@ class API_FLORICAL(API_Abstract):
                 _url_taxref = _url_taxref.replace(' ','%20')
                 self.response = self.api_response(_url_taxref,3, False)
                 self.soup = BeautifulSoup(self.response, 'html.parser')
-        if len(self.response) == 0:
-            return
-        
-        self.taxaname = ''
-        self.family = ''
+               
+            if len(self.response) == 0:
+                return
+
         #soup = self.soup
         self.list_field["url"] = _url_taxref
         #title = soup.find("title").text

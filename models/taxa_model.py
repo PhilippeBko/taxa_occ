@@ -1,14 +1,16 @@
 import re
 import sys
 import json
+
 from PyQt5 import QtCore, QtGui, QtWidgets, QtSql, uic
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import QMessageBox, QDialogButtonBox, QGridLayout, QApplication, QCompleter
 
+########################################
 from models.api_thread import API_TAXREF, API_ENDEMIA, API_POWO, API_FLORICAL
-
 from core.widgets import PN_TaxaSearch
 from core import functions as commons
+########################################
 #data_prefix = {11:'subfam.', 12:'tr.', 13:'subtr.', 15:'subg.', 16:'sect.', 17:'subsect.',18:'ser.',19:'subser.',21:'',22:'subsp.',23:'var.',25:'f.',28:'cv.',31:'x'}
 
 # Main classe to store a taxaname with some properties
@@ -109,6 +111,55 @@ class PNTaxa(object):
             return self.taxaname
         return self.dict_species.get ("name", None)
     
+
+    @property 
+    def json_metadata (self):
+    #load metadata json from database
+        json_data = self.field_dbase("metadata")
+        if not json_data:
+            return
+        json_data = json.loads(json_data)
+        #sorted the result, assure to set web links and query time ending the dict
+        for key, metadata in json_data.items():
+            _links = {'_links': None, 'url':None, 'webpage':None, 'query time': None}
+            _fields = {}
+            for _key, _value in metadata.items():
+                if _key.lower() in _links:
+                    _links[_key] = _value
+                else:
+                    _fields[_key] = _value
+            for _link, _url in _links.items():
+                 if _url:
+                    _fields[_link] = _url
+            json_data[key] = _fields
+        return json_data
+
+
+    @property
+    def json_names(self):
+    #load all the similar names of the taxa to a json dictionnary 
+        sql_query = f"""
+                    SELECT 
+                        a.name, 
+                        a.category, 
+                        a.id_category 
+                    FROM 
+                        taxonomy.pn_names_items({self.idtaxonref}) a 
+                    ORDER BY 
+                        a.name
+                    """
+        query = QtSql.QSqlQuery(sql_query)
+        dict_db_names = {}
+        while query.next():
+            if query.value("id_category") < 5:
+                _category = 'Autonyms'
+            else:
+                _category = query.value("category")
+            if _category not in dict_db_names:
+                dict_db_names[_category] = []
+            dict_db_names[_category].append(query.value("name"))
+        return dict_db_names
+
     @property
     def json_properties(self):
         """     
@@ -131,6 +182,7 @@ class PNTaxa(object):
             tab_identity["name"] =  self.basename     
         except Exception:
             return
+        
         #fill the properties from the json field properties annexed to the taxa        
         try:
             json_props = self.field_dbase("properties")
@@ -141,7 +193,7 @@ class PNTaxa(object):
                     if tab_inbase is not None:
                         for _key2, _value2 in tab_inbase.items():
                             _value2 = commons.get_str_value(_value2)
-                            if _value2 !='':
+                            if _value2:
                                 _value[_key2] = _value2.title()
                 except Exception:
                     continue
@@ -279,17 +331,14 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
     apply_signal  = pyqtSignal(object)
     def __init__(self, myPNTaxa): # move toward a same id_rank if merge
         super().__init__()
-        self.window = uic.loadUi("ui/pn_addtaxa.ui")
         self.myPNTaxa = myPNTaxa
         self.table_taxa = []
         self.data_rank = []
         self._taxaname = ''
         self.updated = False
-        # self.window.comboBox_searchAPI.addItems(['TaxRef', 'Endemia', 'Powo', 'Florical'])
-        # self.window.comboBox_searchAPI.setCurrentIndex(0)
-
-        #self.window.setWindowTitle("Add Taxa")        
-        self.window.publishedComboBox.addItems(['Published', 'Unpublished'])
+        #set the ui
+        self.window = uic.loadUi("ui/pn_addtaxa.ui")
+        self.window.publishedComboBox.addItems(['True', 'False'])
         self.rankComboBox_setdata()      
 
         model = QtGui.QStandardItemModel()
@@ -600,7 +649,7 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
                 if item.checkState()==2:
                     #taxa["parent"] = taxaname
                     tab_result.append(taxa)
-                tab_result += self.get_listcheck(taxa["id"],taxa["taxaname"])
+                tab_result += self.get_listcheck(taxa["id"]) #,taxa["taxaname"])
         return tab_result
 
     def apply(self):
@@ -609,13 +658,14 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
         self.updated = False        
         index = self.window.tabWidget_main.currentIndex()
         if index == 0 :
-            newbasename = self.window.basenameLineEdit.text().strip()
-            newauthors = self.window.authorsLineEdit.text().strip()            
-            newpublished = self.window.publishedComboBox.currentText() == 'Published'
+            newbasename = self.window.basenameLineEdit.text().strip()            
+            newpublished = (self.window.publishedComboBox.currentIndex() == 0)
+            newauthors = self.window.authorsLineEdit.text().strip()
+            newidparent = self.myPNTaxa.idtaxonref
+            newidrank = self.data_rank[self.window.rankComboBox.currentIndex()]
+            #create the pn_taxa_edit query function (internal to postgres)
             if len(newauthors) == 0:
                 newpublished = False
-            newidrank = self.data_rank[self.window.rankComboBox.currentIndex()]
-            newidparent = self.myPNTaxa.idtaxonref
             sql_query = f"""
                             SELECT 
                                 id_taxonref, 
@@ -627,17 +677,19 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             result = QtSql.QSqlQuery (sql_query)
             code_error = result.lastError().nativeErrorCode ()
             if len(code_error) == 0:
-                result.next()
-                item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
-                              result.value("id_rank"), newpublished)
-                self.apply_signal.emit([item])
+                self.updated_datas = []
+                while result.next():
+                    item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
+                                result.value("id_rank"), newpublished)
+                    self.updated_datas.append(item)
+
+                self.apply_signal.emit(self.updated_datas)
                 self.window.basenameLineEdit.setText('')
                 self.window.authorsLineEdit.setText('')
                 return
             else:
                 msg = commons.postgres_error(result.lastError())
                 QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)
-            
             return
 
         #for other tabs
@@ -653,14 +705,12 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
                             SELECT 
                                 '_basename' AS basename, 
                                 '_authors' AS authors, 
-                                b.id_rank, 
+                                _idrank as id_rank, 
                                 a.id_taxonref AS id_parent
                             FROM
-                                taxonomy.taxa_reference a, taxonomy.taxa_rank b 
+                                taxonomy.taxa_names a
                             WHERE 
-                                lower(a.taxaname) = '_parentname' 
-                            AND 
-                                lower(b.rank_name) ='_rankname') taxa        
+                                lower(a.taxaname) = '_parentname'
                     """
 
         # sql_text = "SELECT (taxonomy.pn_taxa_edit (0, taxa.basename, taxa.authors, taxa.id_parent, taxa.id_rank, TRUE, TRUE)).* FROM"
@@ -673,10 +723,13 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             sql_query = sql_text.replace('_basename', taxa["basename"])
             sql_query = sql_query.replace('_authors', taxa["authors"])
             sql_query = sql_query.replace('_parentname', taxa["parent"].lower())
-            sql_query = sql_query.replace('_rankname', taxa["rank"].lower())
+            sql_query = sql_query.replace('_idrank', str(commons.get_dict_rank_value(taxa["rank"], "id_rank")))
+
+            #sql_query = sql_query.replace('_rankname', taxa["rank"].lower())
             #use the basename if parent has only one word
-            if len(taxa["parent"].split()) == 1:
-                sql_query = sql_query.replace('lower(a.taxaname)', 'lower(a.basename)')
+            # if len(taxa["parent"].split()) == 1:
+            #     sql_query = sql_query.replace('lower(a.taxaname)', 'lower(a.basename)')
+            
             #print (sql_query)
             result = QtSql.QSqlQuery (sql_query)
             code_error = result.lastError().nativeErrorCode ()
@@ -709,7 +762,7 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
         self._taxaname = ''
         self.tab_parent_comboBox =[]
         self.parent_name = self.PNTaxa.parent_name
-
+        #set the ui 
         self.window = uic.loadUi("ui/pn_edittaxa.ui")
         self.window.setWindowTitle("Edit reference")        
         self.window.publishedComboBox.addItems(['True', 'False'])
@@ -797,13 +850,15 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
     def apply(self):
         code_error =''
         msg = ''
-        self.updated = False
+        self.updated = False 
+        idtaxonref = self.PNTaxa.idtaxonref
         newbasename = self.window.basenameLineEdit.text().strip()
-        published = (self.window.publishedComboBox.currentIndex() == 0)  
-        str_idtaxonref = str(self.PNTaxa.idtaxonref)
+        published = (self.window.publishedComboBox.currentIndex() == 0) 
         newauthors = self.window.authorsLineEdit.text().strip()
-        str_newidparent = str(self.tab_parent_comboBox[self.window.parent_comboBox.currentIndex()])
-        # str_newidrank = str(self.data_rank[self.window.rankComboBox.currentIndex()])
+        newidparent = self.tab_parent_comboBox[self.window.parent_comboBox.currentIndex()]
+        #create the pn_taxa_edit query function (internal to postgres)
+        if len(newauthors) == 0:
+            published = False
         sql_query = f"""
                     SELECT 
                         id_taxonref, 
@@ -811,21 +866,21 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
                         coalesce(authors,'') as authors, 
                         id_rank
                     FROM 
-                        taxonomy.pn_taxa_edit ({str_idtaxonref}, '{newbasename}', '{newauthors}', {str_newidparent}, NULL, '{str(published)}', TRUE)       
+                        taxonomy.pn_taxa_edit ({idtaxonref}, '{newbasename}', '{newauthors}', {newidparent}, NULL, {published}, TRUE)       
         """
         #print (sql_query)
         result = QtSql.QSqlQuery (sql_query)
         code_error = result.lastError().nativeErrorCode ()
         if len(code_error) == 0:
-        #fill tlview with query result
             self.updated_datas = []
             while result.next():
                 item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
                               result.value("id_rank"), published)
                 self.updated_datas.append(item)
+            self.apply_signal.emit(self.updated_datas)
+            
             self.input_name = self.window.taxaLineEdit.text()
             self.parent_name = self.window.parent_comboBox.currentText()
-            self.apply_signal.emit(self.updated_datas)
             self.taxaLineEdit_setdata()
             self.updated = True
             return True

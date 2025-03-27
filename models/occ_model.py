@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 from cartopy import crs as ccrs, feature as cfeature
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
+########################################
 from core.functions import get_str_value, list_db_traits, get_column_type, list_db_fields
+########################################
 #from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 class PN_occ_model(QtCore.QAbstractTableModel):
