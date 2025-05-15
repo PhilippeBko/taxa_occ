@@ -72,12 +72,14 @@ list_db_fields["strata"]["items"] = list_strata
 list_db_fields["month"]["items"] = list_month
 list_numeric_db_fields = {key: value for key, value in list_db_fields.items() if value["type"] == "numeric"}
 
+
 list_db_properties = {
-    "identity":{"name": {"type": "text"}, 
-                "authors": {"type": "text"}, 
-                "published": {"type": 'boolean'}
-               },
-    "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound']}, 
+    # "identity":{"name": {"type": "text"}, 
+    #             "authors": {"type": "text"}, 
+    #             "published": {"type": 'boolean'},
+    #             "rank": {"type": 'text', "items": ['Species', 'Subspecies', 'Variety', 'Hybrid']},
+    #            },
+    "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound', 'Phyllode']}, 
              "phyllotaxy": {"type": "text", "items": ['Alternate', 'Opposite', 'Verticillate']}, 
              "stipulate": {"type": 'boolean'}
              },
@@ -173,6 +175,21 @@ def get_dict_rank_value(key, field = None):
     # if empty, load the table as a Json with id_rank and rank_name as main keys
     if len (RANK_TYPOLOGY) == 0:
         sql_query = "SELECT id_rank, rank_name, row_to_json(t) json_row FROM (SELECT id_rank, rank_name, id_rankparent, suffix, prefix FROM taxonomy.taxa_rank ORDER BY id_rank) t"
+        sql_query = """
+            SELECT id_rank, rank_name, row_to_json(t) json_row 
+            FROM 
+                (SELECT id_rank, rank_name, id_rankparent, suffix, prefix, childs
+                FROM taxonomy.taxa_rank a,
+                LATERAL 
+                    (SELECT 
+                        to_json(array_agg(id_rank)) AS childs
+                    FROM 
+                        taxonomy.pn_ranks_children(a.id_rank) b
+                    ) z
+                ) t
+            ORDER BY 
+                id_rank
+"""
         query = QtSql.QSqlQuery(sql_query)
         while query.next():
             RANK_TYPOLOGY[query.value("id_rank")] = json.loads(query.value("json_row"))
@@ -193,7 +210,7 @@ def get_dict_from_species(_taxa):
     tab_result["original_name"] = _taxa   
     index = -1
     #remove non-alphanumeric except space
-    _taxa = re.sub (r'[0-9\sàâçèéêîôùû,;]',' ', _taxa)
+    #_taxa = re.sub (r'[0-9\sàâçèéêîôùû,;]',' ', _taxa)
     #standardize ssp, var and subsp
     _taxa = re.sub(r'\s+ssp\.?\s+',' subsp. ', _taxa)
     _taxa = re.sub(r'\s+subsp\s+',' subsp. ', _taxa)

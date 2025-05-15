@@ -363,10 +363,24 @@ class API_ENDEMIA(API_Abstract):
         
     def get_metadata(self):
         table_API = []
+        # try:
+        #     table_API = self.todos["data"][0]
+        # except Exception: 
+        #     return
+        
         try:
-            table_API = self.todos["data"][0]
+            tables_API = self.todos["data"]
         except Exception: 
             return
+        
+        for i in range(len(tables_API)):
+            _name = self._get_list_value (tables_API[i], "full_name")
+            if _name.lower() == self.myTaxa.simple_taxaname.lower():
+                table_API = tables_API[i]
+                break
+        if len(table_API) == 0:
+            return
+
         #get metadata on names
         _name = self._get_list_value (table_API, "full_name")
         if _name is None: 

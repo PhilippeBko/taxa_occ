@@ -140,9 +140,11 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
 
     def dict_user_properties(self, item_base = None):
     #get the json_data from the treeview model
+        tab_value = {}
         if item_base is None:
             item_base = self.model()
-        tab_value = {}
+        if item_base is None:
+            return tab_value
         for i in range(item_base.rowCount()):
             item = item_base.item(i) ##.data(0)
             if item is None: 
@@ -383,6 +385,7 @@ class PN_TaxaQTreeView(QtWidgets.QTreeView):
         # execute the Query and fill the treeview standarditemmodel based on search id_parent into the third column containing id_taxonref
         query = QtSql.QSqlQuery(sql_query)
         #set the taxon to the hierarchical model rank = taxon
+        key_index = None
         while query.next():
             ls_item_taxonref = []
             ls_item_taxonref = model.findItems(str(query.value('id_parent')), Qt.MatchRecursive, 2)  # MatchExactly
@@ -433,7 +436,8 @@ class PN_TaxaQTreeView(QtWidgets.QTreeView):
                 model.setData(key_index, font, Qt.FontRole)
                 key_index = key_index.sibling(key_row, 1)
                 model.setData(key_index, font, Qt.FontRole)
-        self.selectionModel().setCurrentIndex(key_index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+        if key_index:
+            self.selectionModel().setCurrentIndex(key_index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
         self.setHeaderHidden(True)
         self.hideColumn(2)
         self.hideColumn(3)
