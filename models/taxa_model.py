@@ -13,6 +13,80 @@ from core import functions as commons
 ########################################
 #data_prefix = {11:'subfam.', 12:'tr.', 13:'subtr.', 15:'subg.', 16:'sect.', 17:'subsect.',18:'ser.',19:'subser.',21:'',22:'subsp.',23:'var.',25:'f.',28:'cv.',31:'x'}
 
+
+# def database_save_taxon(dict_tosave, idrankparent = None):
+#     #save a taxon in the database from a dictionary as
+#     #dict_tosave = {"idtaxonref":integer, "basename":text, "authors":text, "idparent":integer, "published":boolean, "idrank" :integer}
+#     #and return a list of PNTaxa updated (PNTaxa1, PNTaxa2,...) with id_parent = idrankparent or first parent if idrankparent is None
+#     code_error =''
+#     msg = ''
+#     idtaxonref = dict_tosave["idtaxonref"]
+#     basename = dict_tosave["basename"].strip().lower()
+#     published = dict_tosave["published"]
+#     authors = dict_tosave["authors"].strip().lower()
+#     idrank = dict_tosave["idrank"]
+#     if not idrank:
+#         idrank = 'NULL'
+#     _parentname = dict_tosave.get("parentname", None)
+#     _idparent = dict_tosave.get("idparent", None)
+#     #create the from_query depending if parentname/id_parent are present into the dictionnayr dict_tosave
+#     if _parentname is not None:# get the id_parent from the parentname (to add taxon)
+#         _parentname = _parentname.strip().lower()
+#         sql_from = f"""(SELECT 
+#                             (taxonomy.pn_taxa_edit ({idtaxonref}, taxa.basename, taxa.authors, taxa.id_parent, taxa.id_rank, TRUE, TRUE)).* 
+#                         FROM
+#                             (
+#                                 SELECT 
+#                                     '{basename}' AS basename, 
+#                                     '{authors}' AS authors, 
+#                                     {idrank} as id_rank, 
+#                                     a.id_taxonref AS id_parent
+#                                 FROM
+#                                     taxonomy.pn_taxa_searchname('{_parentname}') a
+#                             ) taxa
+#                         ) as result
+#                     """
+#     elif _idparent:
+#         sql_from = f"""taxonomy.pn_taxa_edit ({idtaxonref}, '{basename}', '{authors}', {_idparent}, {idrank}, {published}, TRUE)"""
+#     else:
+#         return
+#     #manage the id_parent field
+#     field_idparent = ", id_parent"
+#     if idrankparent is not None:
+#         field_idparent = f", taxonomy.pn_taxa_getparent(id_parent, {idrankparent}) AS id_parent"
+#     #create the final query
+#     sql_query = f"""
+#                 SELECT 
+#                     id_taxonref, 
+#                     taxaname,
+#                     coalesce(authors,'') as authors, 
+#                     id_rank
+#                     {field_idparent}
+#                 FROM
+#                     {sql_from}   
+#     """
+ 
+#     #print (sql_query)
+#     #execute query
+#     result = QtSql.QSqlQuery (sql_query)
+#     code_error = result.lastError().nativeErrorCode ()
+#     if len(code_error) == 0:#add a PNTaxa if save without errors
+#         updated_datas = []
+#         while result.next():
+#             item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
+#                             result.value("id_rank"), published)
+#             item.id_parent = result.value("id_parent")
+#             updated_datas.append(item)
+#         return updated_datas
+#     else:
+#         msg = commons.postgres_error(result.lastError())
+#     QMessageBox.critical(None, "Database error", msg, QMessageBox.Ok)
+#     return []
+
+
+
+
+
 # Main classe to store a taxaname with some properties
 class PNTaxa(object):
     def __init__(self, idtaxonref, taxaname, authors, idrank, published = None):
@@ -22,15 +96,15 @@ class PNTaxa(object):
         self.id_taxonref = idtaxonref
         self.published = published
         self.api_score = 0
-        self.parent_name = None
         self.id_parent = None
-        self.id_rank_parent = None
+        self.parent_name = None
+        #self.id_rank_parent = None
         self.dict_species = commons.get_dict_from_species(self.taxaname)
         if self.dict_species is None:
             self.dict_species = {}
 
     def field_dbase(self, fieldname):
-        """get a field value from the table taxonomy.taxa_reference according to a id_taxonref"""
+        """get a field value from the view taxonomy.taxa_names according to a id_taxonref"""
         sql_query = f"""
                     SELECT 
                         {fieldname} 
@@ -163,7 +237,7 @@ class PNTaxa(object):
         return dict_db_names
 
     @property
-    def json_properties2(self):
+    def json_properties_count(self):
         if self.id_rank >= 21:
             return None
     #load all the similar names of the taxa to a json dictionnary
@@ -253,153 +327,153 @@ class PNTaxa(object):
 
 
 #class to generate a model (QAbstractTableModel) for QtableView widget to display taxa (PNTaxa) with red/green dot according to api_score (PNTaxa)
-class TableModel(QtCore.QAbstractTableModel):
-    header_labels = ['Taxa Name', 'Authors', 'Rank'] #, 'ID Taxon']
-    def __init__(self, data = None):
-        super(TableModel, self).__init__()
-        self.PNTaxon = []
-        self.PNTaxon = data if data is not None else []
+# class TableModel(QtCore.QAbstractTableModel):
+#     header_labels = ['Taxa Name', 'Authors', 'Rank'] #, 'ID Taxon']
+#     def __init__(self, data = None):
+#         super(TableModel, self).__init__()
+#         self.PNTaxon = []
+#         self.PNTaxon = data if data is not None else []
     
-    def resetdata(self, newdata = None):
-        self.beginResetModel()
-        self.PNTaxon = newdata if newdata is not None else []
-        self.endResetModel()
+#     def resetdata(self, newdata = None):
+#         self.beginResetModel()
+#         self.PNTaxon = newdata if newdata is not None else []
+#         self.endResetModel()
 
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.header_labels[section]
-        #return self.headerData(self, section, orientation, role)
+#     def headerData(self, section, orientation, role=Qt.DisplayRole):
+#         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+#             return self.header_labels[section]
+#         #return self.headerData(self, section, orientation, role)
 
-    def delete (self, idtaxonref):
-        ##delete one item in the list, NOT PERSISTENT IN DATABASE)
-        self.PNTaxon = [x for x in self.PNTaxon if x.idtaxonref != idtaxonref]
-
-
-    # def add (self, myPNTaxa):
-    #     ##delete one item in the list, NOT PERSISTENT IN DATABASE)
-    #     self.PNTaxon = [x for x in self.PNTaxon if x.idtaxonref != myPNTaxa.idtaxonref]
+#     def delete (self, idtaxonref):
+#         ##delete one item in the list, NOT PERSISTENT IN DATABASE)
+#         self.PNTaxon = [x for x in self.PNTaxon if x.idtaxonref != idtaxonref]
 
 
-    def row_idtaxonref (self, idtaxonref):
-        ##return the row index of the idtaxonref into the _data list
-        for x in range(len(self.PNTaxon)):
-            if self.PNTaxon[x].idtaxonref == idtaxonref:
-                return x              
-        return -1
+#     # def add (self, myPNTaxa):
+#     #     ##delete one item in the list, NOT PERSISTENT IN DATABASE)
+#     #     self.PNTaxon = [x for x in self.PNTaxon if x.idtaxonref != myPNTaxa.idtaxonref]
 
-    def refresh (self, myPNTaxa = None):
-        ##By default refresh the entire
-        # look for refresh id_taxonref if exists otherwise append the new row
-        ##not persistent in the database
-        if myPNTaxa is None:
-            self.resetdata(self.PNTaxon)
-        else:
-            found = False
-            for taxa in self.PNTaxon:
-                if taxa.idtaxonref == myPNTaxa.idtaxonref:
-                    found = True
-                    taxa.taxaname = myPNTaxa.taxaname
-                    taxa.authors = myPNTaxa.authors
-                    taxa.id_rank = myPNTaxa.id_rank
-                    if myPNTaxa.published is not None:
-                        taxa.published = myPNTaxa.published
-            if not found :
-                self.PNTaxon.append(myPNTaxa)
 
-    def data(self, index, role):
-        if not index.isValid():
-            return None
-        if 0 <= index.row() < self.rowCount():
-            item = self.PNTaxon[index.row()]
-            col = index.column()        
-            if role == Qt.DisplayRole:
-                if col == 0:
-                    return item.taxaname
-                elif col == 1:
-                    #is_published = item.published ##getattr(item, 'published', True)
-                    _authors = str(item.authors)
-                    if item.isautonym:
-                        _authors = '[Autonym]'
-                    elif _authors=='':
-                        _authors = ''
-                    elif not item.published:
-                        _authors += ' ined.'
-                    return _authors.strip()
+#     def row_idtaxonref (self, idtaxonref):
+#         ##return the row index of the idtaxonref into the _data list
+#         for x in range(len(self.PNTaxon)):
+#             if self.PNTaxon[x].idtaxonref == idtaxonref:
+#                 return x              
+#         return -1
 
-                elif col == 2:
-                    return item.rank_name
-            elif role == Qt.UserRole:
-                return item
-            elif role == Qt.FontRole:
-                #is_published = item.published ##getattr(item, 'published', True)
-                if not item.published:
-                    font = QtGui.QFont()
-                    font.setItalic(True)
-                    return font
-            elif role == Qt.DecorationRole:
-                if col == 0:
-                    len_json = getattr(item, 'api_score', 0)
-                    col = QtGui.QColor(0,0,0,255)
-                    if 1<= len_json <= 2:
-                        col = QtGui.QColor(255,128,0,255)
-                    elif len_json == 3:
-                        col = QtGui.QColor(255,255,0,255)
-                    elif len_json >= 4:
-                        col = QtGui.QColor(0,255,0,255)
-                    px = QtGui.QPixmap(10,10)
-                    px.fill(QtCore.Qt.transparent)
-                    painter = QtGui.QPainter(px)
-                    painter.setRenderHint(QtGui.QPainter.Antialiasing)
-                    px_size = px.rect().adjusted(2,2,-2,-2)
-                    painter.setBrush(col)
+#     def refresh (self, myPNTaxa = None):
+#         ##By default refresh the entire
+#         # look for refresh id_taxonref if exists otherwise append the new row
+#         ##not persistent in the database
+#         if myPNTaxa is None:
+#             self.resetdata(self.PNTaxon)
+#         else:
+#             found = False
+#             for taxa in self.PNTaxon:
+#                 if taxa.idtaxonref == myPNTaxa.idtaxonref:
+#                     found = True
+#                     taxa.taxaname = myPNTaxa.taxaname
+#                     taxa.authors = myPNTaxa.authors
+#                     taxa.id_rank = myPNTaxa.id_rank
+#                     if myPNTaxa.published is not None:
+#                         taxa.published = myPNTaxa.published
+#             if not found :
+#                 self.PNTaxon.append(myPNTaxa)
 
-                    if len_json == 0:
-                        painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
-                            QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                    else:
-                        painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                            QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+#     def data(self, index, role):
+#         if not index.isValid():
+#             return None
+#         if 0 <= index.row() < self.rowCount():
+#             item = self.PNTaxon[index.row()]
+#             col = index.column()        
+#             if role == Qt.DisplayRole:
+#                 if col == 0:
+#                     return item.taxaname
+#                 elif col == 1:
+#                     #is_published = item.published ##getattr(item, 'published', True)
+#                     _authors = str(item.authors)
+#                     if item.isautonym:
+#                         _authors = '[Autonym]'
+#                     elif _authors=='':
+#                         _authors = ''
+#                     elif not item.published:
+#                         _authors += ' ined.'
+#                     return _authors.strip()
 
-                    # painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                    #     QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+#                 elif col == 2:
+#                     return item.rank_name
+#             elif role == Qt.UserRole:
+#                 return item
+#             elif role == Qt.FontRole:
+#                 #is_published = item.published ##getattr(item, 'published', True)
+#                 if not item.published:
+#                     font = QtGui.QFont()
+#                     font.setItalic(True)
+#                     return font
+#             elif role == Qt.DecorationRole:
+#                 if col == 0:
+#                     len_json = getattr(item, 'api_score', 0)
+#                     col = QtGui.QColor(0,0,0,255)
+#                     if 1<= len_json <= 2:
+#                         col = QtGui.QColor(255,128,0,255)
+#                     elif len_json == 3:
+#                         col = QtGui.QColor(255,255,0,255)
+#                     elif len_json >= 4:
+#                         col = QtGui.QColor(0,255,0,255)
+#                     px = QtGui.QPixmap(10,10)
+#                     px.fill(QtCore.Qt.transparent)
+#                     painter = QtGui.QPainter(px)
+#                     painter.setRenderHint(QtGui.QPainter.Antialiasing)
+#                     px_size = px.rect().adjusted(2,2,-2,-2)
+#                     painter.setBrush(col)
+
+#                     if len_json == 0:
+#                         painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
+#                             QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+#                     else:
+#                         painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
+#                             QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+
+#                     # painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
+#                     #     QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
                     
 
-                    painter.drawEllipse(px_size)
-                    painter.end()
+#                     painter.drawEllipse(px_size)
+#                     painter.end()
 
-                    return QtGui.QIcon(px)
+#                     return QtGui.QIcon(px)
 
-            elif col == 0 and role == Qt.TextAlignmentRole:
-                if hasattr(item, 'id_rank') and item.id_rank >= 21:
-                    return Qt.AlignRight | Qt.AlignVCenter
-                else:
-                    return Qt.AlignLeft | Qt.AlignVCenter
+#             elif col == 0 and role == Qt.TextAlignmentRole:
+#                 if hasattr(item, 'id_rank') and item.id_rank >= 21:
+#                     return Qt.AlignRight | Qt.AlignVCenter
+#                 else:
+#                     return Qt.AlignLeft | Qt.AlignVCenter
 
-    def rowCount(self, index=QtCore.QModelIndex()):
-        # The length of the outer list.
-        return len(self.PNTaxon)
+#     def rowCount(self, index=QtCore.QModelIndex()):
+#         # The length of the outer list.
+#         return len(self.PNTaxon)
         
-    def columnCount(self, index=QtCore.QModelIndex()):
-        # The following takes the first sub-list, and returns
-        # the length (only works if all rows are an equal length)
-        try:
-            return 2 #3 #self.PNTaxon[0].columnCount # len(self.PNTaxon[0])
-        except Exception:
-            return 0
+#     def columnCount(self, index=QtCore.QModelIndex()):
+#         # The following takes the first sub-list, and returns
+#         # the length (only works if all rows are an equal length)
+#         try:
+#             return 2 #3 #self.PNTaxon[0].columnCount # len(self.PNTaxon[0])
+#         except Exception:
+#             return 0
 
-    def additem (self, clrowtable):
-        self.beginInsertRows(QtCore.QModelIndex(), self.rowCount(), self.rowCount())
-        self.PNTaxon.append(clrowtable)
-        self.endInsertRows()
+#     def additem (self, clrowtable):
+#         self.beginInsertRows(QtCore.QModelIndex(), self.rowCount(), self.rowCount())
+#         self.PNTaxon.append(clrowtable)
+#         self.endInsertRows()
         
 #class to add a taxon
 class PN_add_taxaname(QtWidgets.QMainWindow):
     apply_signal  = pyqtSignal(object)
-    def __init__(self, myPNTaxa): # move toward a same id_rank if merge
+    def __init__(self, myPNTaxa, idrankparent = None): 
         super().__init__()
         self.myPNTaxa = myPNTaxa
         self.table_taxa = []
-        #self.data_rank = []
+        self.idrankparent = idrankparent
         self._taxaname = ''
         self.updated = False
         #set the ui
@@ -477,14 +551,6 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
 
 
     def rankComboBox_setdata(self):
-        # sql_query = f"""
-        #                 SELECT 
-        #                     id_rank, 
-        #                     taxonomy.pn_ranks_name(id_rank) as rank_name 
-        #                 FROM 
-        #                     taxonomy.pn_ranks_children({self.myPNTaxa.id_rank})
-        #             """
-        # # #print (sql_query)
         dict_rank  = commons.get_dict_rank_value(self.myPNTaxa.id_rank)
         rank_childs = dict_rank["childs"]
         #self.data_rank = []
@@ -495,16 +561,6 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             #self.data_rank.append(idrank)
             if idrank == self.myPNTaxa.id_rank:
                 index = self.window.rankComboBox.count()-1
-
-        # query2 = QtSql.QSqlQuery (sql_query)
-        # self.window.rankComboBox.clear()
-        # self.data_rank = []
-        # index = -1
-        # while query2.next():
-        #     self.window.rankComboBox.addItem(query2.value("rank_name"))
-        #     self.data_rank.append(query2.value("id_rank"))
-        #     if query2.value("id_rank") == self.myPNTaxa.id_rank:
-        #         index = self.window.rankComboBox.count()-1
         index = max(index, 0)
         try:
             self.window.rankComboBox.setCurrentIndex(index)
@@ -671,37 +727,34 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
         for taxa2 in self.table_taxa:
             if taxa2[_search] == id:
                 item = QtGui.QStandardItem(str(taxa2["rank"]))
-                taxa2["item"] = item
                 taxaref = str(taxa2["taxaname"]) + ' ' + str(taxa2["authors"])
                 item1 = QtGui.QStandardItem(taxaref.strip())
                 item2 = QtGui.QStandardItem(str(taxa2["id"]))
                 item.setCheckable(False)
-                ls_item_taxonref = []
-                try:
-                    ls_item_taxonref = model.findItems(str(id),Qt.MatchRecursive,2) #MatchExactly
-                except Exception:
-                    ls_item_taxonref = None
-
-                if ls_item_taxonref:
+                #ls_item_taxonref = []
+                # try:
+                #     ls_item_taxonref = model.findItems(str(id),Qt.MatchRecursive,2) #MatchExactly
+                # except Exception:
+                #     ls_item_taxonref = None
+                parent_item = self.get_table_taxa_item (id, "item")
+                if parent_item:
                     _checkable = (taxa2["id_taxonref"] == 0)
                     if _checkable:
                         self.window.label_2.setText("Check taxa to add")
                     item.setCheckable(_checkable)
-                    row = ls_item_taxonref[0].row()
-                    index = ls_item_taxonref[0].index()
-                    index0 = index.sibling(row,0)
+                    # row = ls_item_taxonref[0].row()
+                    # index = ls_item_taxonref[0].index()
+                    # index0 = index.sibling(row,0)
                     #append a child to the item
-                    model.itemFromIndex(index0).appendRow([item, item1, item2],)
+                    #model.itemFromIndex(index0).appendRow([item, item1, item2],)
+                    parent_item.appendRow([item, item1, item2],)
                 else:
                     model.appendRow([item, item1, item2],)
                     #to avoid infinite loop
                 if taxa2["idparent"] != taxa2["id"]:
+                    taxa2["item"] = item
                     self.draw_list(taxa2["id"])
-        # print (nb_toadd)
-        # if nb_toadd > 0:
-        #     self.window.label_2.setText("Check taxa to add")
-        # else:
-        #     self.window.label_2.setText("No new taxa to add")
+                    
     def get_table_taxa_item(self,id, key):
     #get a value from a key and id in the table_taxa
         try:
@@ -723,6 +776,25 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
                     tab_result.append(taxa)
                 tab_result += self.get_listcheck(taxa["id"]) #,taxa["taxaname"])
         return tab_result
+    def refresh (self, ls_updated):
+        self.window.basenameLineEdit.setText('')
+        self.window.authorsLineEdit.setText('')
+        self.window.publishedComboBox.setCurrentIndex(0)
+        index = self.window.tabWidget_main.currentIndex()
+        if index == 0:
+            return
+        for item_update in ls_updated:
+            for taxa in self.table_taxa:
+                if taxa["taxaname"] == item_update.basename:
+                    taxa["id_taxonref"] = item_update.idtaxonref
+
+        # taxa_toAdd = self.get_listcheck()
+        # for taxa in taxa_toAdd:
+        #     for item_update in ls_updated:
+        #         for taxa2 in self.table_taxa:
+        #             if taxa2["id"] == taxa["id"]:
+        #                 taxa2["id_taxonref"] = item_update.idtaxonref
+        self.draw_list()
 
     def apply(self):
     #apply add taxa
@@ -741,30 +813,9 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             #create the pn_taxa_edit query function (internal to postgres)
             if len(newauthors) == 0:
                 newpublished = False
-            sql_query = f"""
-                            SELECT 
-                                id_taxonref, 
-                                taxaname, 
-                                coalesce(authors,'') as authors, 
-                                id_rank
-                            FROM taxonomy.pn_taxa_edit (0, '{newbasename}', '{newauthors}', {newidparent}, {newidrank}, {newpublished}, TRUE)
-                        """
-            result = QtSql.QSqlQuery (sql_query)
-            code_error = result.lastError().nativeErrorCode ()
-            if len(code_error) == 0:
-                self.updated_datas = []
-                while result.next():
-                    item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
-                                result.value("id_rank"), newpublished)
-                    self.updated_datas.append(item)
-
-                self.apply_signal.emit(self.updated_datas)
-                self.window.basenameLineEdit.setText('')
-                self.window.authorsLineEdit.setText('')
-                return
-            else:
-                msg = commons.postgres_error(result.lastError())
-                QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)
+            dict_tosave = {"idtaxonref":0, "basename":newbasename, "authors":newauthors, "idparent":newidparent, "published":newpublished, "idrank":newidrank}
+            #list_updated = database_save_taxon(dict_tosave, self.idrankparent)
+            self.apply_signal.emit(dict_tosave)
             return
 
     #for API tabs
@@ -773,52 +824,37 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             return
         if len(taxa_toAdd) == 0:
             return
-        sql_text = """SELECT 
-                        (taxonomy.pn_taxa_edit (0, taxa.basename, taxa.authors, taxa.id_parent, taxa.id_rank, TRUE, TRUE)).* 
-                       FROM
-                        (
-                            SELECT 
-                                '_basename' AS basename, 
-                                '_authors' AS authors, 
-                                _idrank as id_rank, 
-                                a.id_taxonref AS id_parent
-                            FROM
-                                taxonomy.pn_taxa_searchname('_parentname') a
-                        ) taxa
-                    """
-
-
-        self.updated_datas = []
-        #add row by row the new taxa by replacing value in the sql_text above
+        #create the dict_tosave for each taxa to add
+        list_updated = []
         for taxa in taxa_toAdd:
-            sql_query = sql_text.replace('_basename', taxa["basename"])
-            sql_query = sql_query.replace('_authors', taxa["authors"])
-            sql_query = sql_query.replace('_parentname', taxa["parent"].lower())
-            sql_query = sql_query.replace('_idrank', str(commons.get_dict_rank_value(taxa["rank"], "id_rank")))
-
-            #sql_query = sql_query.replace('_rankname', taxa["rank"].lower())
-            #use the basename if parent has only one word
-            # if len(taxa["parent"].split()) == 1:
-            #     sql_query = sql_query.replace('lower(a.taxaname)', 'lower(a.basename)')
+            newbasename = taxa["basename"]
+            newauthors = taxa["authors"]
+            parentname = taxa["parent"]
+            published = True
+            newidrank = commons.get_dict_rank_value(taxa["rank"], "id_rank")
+            if len(newauthors) == 0:
+                published = False
+            #save the item into the database
+            dict_tosave = {"idtaxonref":0, "basename":newbasename, "authors":newauthors, "parentname":parentname, "published":published, "idrank" :newidrank}
+            list_updated.append(dict_tosave)
             
-            #print (sql_query)
-            result = QtSql.QSqlQuery (sql_query)
-            code_error = result.lastError().nativeErrorCode ()
-            if len(code_error) == 0:
-                result.next()
-                idtaxonref = result.value("id_taxonref")
-                item = PNTaxa(idtaxonref, result.value("taxaname"), result.value("authors"), 
-                              result.value("id_rank"), 'True')
-                self.updated_datas.append(item)
+            # item_update = database_save_taxon(dict_tosave, self.idrankparent)
 
-                #set id_taxonref into the self.table_taxa to unchecked add
-                for taxa2 in self.table_taxa:
-                    if taxa2["id"] == taxa["id"]:
-                        taxa2["id_taxonref"]=idtaxonref
-                        break
-        self.apply_signal.emit(self.updated_datas)
-        self.draw_result()
-        self.updated = True
+            # if item_update:
+            #     #update the id_taxonref in the table_taxa
+            #     item_update = item_update[0]
+            #     list_updated.append(item_update)
+            #     for taxa2 in self.table_taxa:
+            #         if taxa2["id"] == taxa["id"]:
+            #             taxa2["id_taxonref"] = item_update.idtaxonref
+            #             break
+            # else:
+            #     break
+        if list_updated:
+            self.apply_signal.emit(list_updated)
+            #self.draw_result()
+        return
+
 
     def close(self):
         self.window.close()
@@ -830,11 +866,12 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
 #edit a taxa and apply by emit signal 
 class PN_edit_taxaname(QtWidgets.QMainWindow):
     apply_signal  = pyqtSignal(object)
-    def __init__(self, myPNTaxa): #mode_edit = 0 (edition), mode_edit = 1 (add), mode_edit = 2 (move)
+    def __init__(self, myPNTaxa, idrankparent = None):
         super().__init__()
         self.PNTaxa = myPNTaxa
         self.input_name =''
-        self._taxaname = ''
+        #self._taxaname = ''
+        self.idrankparent = idrankparent
         self.tab_parent_comboBox =[]
         self.parent_name = self.PNTaxa.parent_name
         #set the ui 
@@ -891,40 +928,43 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
 
     def taxaLineEdit_setdata(self):
         #newparent = self.window.parent_comboBox.currentText()
-        newbasename = self.window.basenameLineEdit.text()
+        newbasename = self.window.basenameLineEdit.text().title().strip()
         newauthors = self.window.authorsLineEdit.text()
-        newbasename = newbasename.lower()
-        parentname = self.window.parent_comboBox.currentText() ##self.PNTaxa.parent_name
+        parentname = None
+        prefix = None
+        published = (self.window.publishedComboBox.currentIndex() == 0)
         ined = ''
         if len(newauthors) > 0 and self.window.publishedComboBox.currentIndex() == 1:
             ined = ' ined.'        
         taxa =''
         try:
             id_rank = self.PNTaxa.id_rank
-            prefix = commons.get_dict_rank_value(id_rank, 'prefix') #data_prefix[id_rank]
-            if len(prefix) > 0:
-                prefix = " " + prefix
-            taxa = parentname + prefix + " " + newbasename
+            if id_rank >=21:
+                parentname = self.window.parent_comboBox.currentText()
+                prefix = commons.get_dict_rank_value(id_rank, 'prefix')
+                newbasename = newbasename.lower()
+            taxa = " ".join(str(part) for part in [parentname, prefix, newbasename, newauthors, ined] if part)
         except Exception:
-            taxa = newbasename.title()
-        self._taxaname = taxa
-        taxa = taxa + ' ' + newauthors + ined
-        taxa = re.sub(' +', ' ', taxa.strip())
+            taxa = " ".join([newbasename, newauthors, ined])
+        #set the title of the window
         self.window.taxaLineEdit.setText(taxa)
         #if text is different than input text than activated apply button
 
         if len(self.input_name) == 0 : 
             return
-        _apply = ((taxa != self.input_name) or 
-                (self.parent_name !=self.window.parent_comboBox.currentText()))        
+        _apply = (
+                (taxa != self.input_name) or 
+                (self.parent_name != self.window.parent_comboBox.currentText()) or
+                (self.PNTaxa.published != published)
+                )        
         self.window.buttonBox.button(QDialogButtonBox.Apply).setEnabled(_apply)
-        
+
     def close(self):
         self.window.close()
         
     def apply(self):
-        code_error =''
-        msg = ''
+        # code_error =''
+        # msg = ''
         self.updated = False 
         idtaxonref = self.PNTaxa.idtaxonref
         newbasename = self.window.basenameLineEdit.text().strip()
@@ -934,35 +974,17 @@ class PN_edit_taxaname(QtWidgets.QMainWindow):
         #create the pn_taxa_edit query function (internal to postgres)
         if len(newauthors) == 0:
             published = False
-        sql_query = f"""
-                    SELECT 
-                        id_taxonref, 
-                        taxaname, 
-                        coalesce(authors,'') as authors, 
-                        id_rank
-                    FROM 
-                        taxonomy.pn_taxa_edit ({idtaxonref}, '{newbasename}', '{newauthors}', {newidparent}, NULL, {published}, TRUE)       
-        """
-        #print (sql_query)
-        result = QtSql.QSqlQuery (sql_query)
-        code_error = result.lastError().nativeErrorCode ()
-        if len(code_error) == 0:
-            self.updated_datas = []
-            while result.next():
-                item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
-                              result.value("id_rank"), published)
-                self.updated_datas.append(item)
-            self.apply_signal.emit(self.updated_datas)
-            
-            self.input_name = self.window.taxaLineEdit.text()
-            self.parent_name = self.window.parent_comboBox.currentText()
-            self.taxaLineEdit_setdata()
-            self.updated = True
-            return True
-        else:
-            msg = commons.postgres_error(result.lastError())
-        QMessageBox.critical(self.window, "Database error", msg, QMessageBox.Ok)        
-        return self.updated
+        
+        dict_tosave = {"idtaxonref":idtaxonref, "basename":newbasename, "authors":newauthors, "idparent":newidparent, "published":published, "idrank" :None}
+        self.apply_signal.emit(dict_tosave)
+        return True
+
+    def refresh (self, ls_updated = None):
+        #refresh variables and text info
+        self.input_name = self.window.taxaLineEdit.text()
+        self.parent_name = self.window.parent_comboBox.currentText()
+        self.taxaLineEdit_setdata()
+        self.updated = True
 
     def show(self):
         self.window.show()
@@ -1420,21 +1442,21 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.table = QtWidgets.QTableView()
+        # self.table = QtWidgets.QTableView()
 
-        data = [
-           PNTaxa(123,'Miconia', 'DC.', 14,0),
-           PNTaxa(124,'Miconia calvescens', 'DC.', 21,1)
-        #  # PNTaxa(1456,'Sapotaceae', 'L.', 10),
-         ]
-        #self.model = TableModel(data)
-        self.model = TableModel()
-        self.model.resetdata(data)
-        self.table.setModel(self.model)
-        #self.model.additem(PNTaxa(1456,'Sapotaceae', 'L.', 10, 2))
-        #self.model.additem(PNTaxa(1800,'Arecaceae', 'L.', 10, 3))
+        # data = [
+        #    PNTaxa(123,'Miconia', 'DC.', 14,0),
+        #    PNTaxa(124,'Miconia calvescens', 'DC.', 21,1)
+        # #  # PNTaxa(1456,'Sapotaceae', 'L.', 10),
+        #  ]
+        # #self.model = TableModel(data)
+        # #self.model = TableModel()
+        # #self.model.resetdata(data)
+        # #self.table.setModel(self.model)
+        # #self.model.additem(PNTaxa(1456,'Sapotaceae', 'L.', 10, 2))
+        # #self.model.additem(PNTaxa(1800,'Arecaceae', 'L.', 10, 3))
 
-        self.setCentralWidget(self.table)
+        # self.setCentralWidget(self.table)
 
 
 
@@ -1459,7 +1481,7 @@ class MainWindow(QtWidgets.QMainWindow):
 class TreeItem:
     def __init__(self, data, parent=None):
         self.parentItem = parent
-        self.itemData = data  # correspond à un objet de PNTaxon
+        self.itemData = data
         self.childItems = []
 
     def appendChild(self, item):
@@ -1472,7 +1494,7 @@ class TreeItem:
         return len(self.childItems)
 
     def columnCount(self):
-        return 2  # Taxa Name, Authors, Rank
+        return 2  # Taxa Name, Authors
 
     def data(self, column):
         if column == 0:
@@ -1486,8 +1508,6 @@ class TreeItem:
             elif not self.itemData.published:
                 _authors += ' ined.'
             return _authors.strip()
-        # elif column == 2:
-        #     return self.itemData.rank_name
         return None
 
     def parent(self):
@@ -1497,17 +1517,24 @@ class TreeItem:
         if self.parentItem:
             return self.parentItem.childItems.index(self)
         return 0
-0
+
+
 class TreeModel(QtCore.QAbstractItemModel):
     header_labels = ['Name', 'Authors']
 
     def __init__(self, data=None, parent=None):
         super(TreeModel, self).__init__(parent)
         self.rootItem = TreeItem(None)
-        self.show_orphelins = True  
-        self.setupModelData(data if data else [])
+        self.parent_nodes = {}
+        self.sort_column = 0
+        self.sort_order = QtCore.Qt.AscendingOrder
+        #option to show or not orphelin taxa (not referenced into the grouped node)
+        self.show_orphelins = True
+        self.items = data if data else []
+        self.setupModelData()
 
-    def sort(self, column, order=Qt.AscendingOrder):
+    def sortItems(self, column, order=Qt.AscendingOrder, rootItem=None):
+    # to sort the model by a column (by default all the model)
         def recursive_sort(item):
             item.childItems.sort(
                 key=lambda i: i.data(column).lower() if isinstance(i.data(column), str) else i.data(column),
@@ -1516,30 +1543,128 @@ class TreeModel(QtCore.QAbstractItemModel):
             for child in item.childItems:
                 recursive_sort(child)
 
-        recursive_sort(self.rootItem)
+        if not rootItem:
+            rootItem = self.rootItem
+        self.sort_column = column
+        self.sort_order = order
+        recursive_sort(rootItem)
         self.layoutChanged.emit()
 
+    def indexFromTreeItem(self, tree_item, column=0):
+        if tree_item is None or tree_item == self.rootItem:
+            return QtCore.QModelIndex()
 
-    def setupModelData(self, items):
-        # first loop to detect parent (id_parent = -1)
+        parent_item = tree_item.parent()
+        if parent_item is None:
+            return QtCore.QModelIndex()
+
+        row = parent_item.childItems.index(tree_item)
+        return self.createIndex(row, column, tree_item)
+
+
+
+    def getNode(self, idtaxonref):
+    #get the TreeItem from the idtaxonref
+        return self.parent_nodes.get(idtaxonref, None)
+
+    def getItem(self, idtaxonref):
+        #get the PNTaxa item from the idtaxonref
+        TreeItem = self.getNode(idtaxonref)
+        #return the item
+        return TreeItem.itemData if TreeItem else None
+    
+    def removeItem(self, myPNTaxa):
+        #get the TreeItem from the idtaxonref
+        item = self.getNode(myPNTaxa.id_taxonref)
+        if not item:
+            return
+        #get the parent of the TreeItem
+        parent = item.parent()
+        if not parent:
+            return
+        #set the QmodelIndex for the parent
+        parent_index = self.createIndex(parent.row(), 0, parent) if parent != self.rootItem else QtCore.QModelIndex()
+        
+        #delete the item from the parent list
+        self.beginRemoveRows(parent_index, item.row(), item.row())
+        parent.childItems.remove(item)
+        self.items.remove(item.itemData)
+        #parent.childItems.pop(row)
+        del self.parent_nodes[myPNTaxa.id_taxonref]
+        self.endRemoveRows()
+
+    def addItem(self, myPNTaxa):
+    #add a new item to the model, NOT PERSISTENT IN DATABASE
+        self.beginInsertRows(QtCore.QModelIndex(), len(self.items), len(self.items))
+        self.items.append(myPNTaxa)
+        self.endInsertRows()
+        self.setupModelData()
+
+    def refresh (self, myPNTaxa = None):
+        #Refresh the content of the model, NOT PERSISTENT IN DATABASE
+        ##By default refresh the entire model (myPNTaxa = None)
+        #look for refresh id_taxonref if exists otherwise append the new row
+            #get the PNTaxa Item  
+        if myPNTaxa is None:
+            self.refreshData()
+            return
+        
+        TreeItem = self.parent_nodes.get(myPNTaxa.id_parent, None)
+        if self.getItem (myPNTaxa.idtaxonref): #item already exists
+            item = self.getItem(myPNTaxa.idtaxonref)
+            #test the id_parent, if different remove and recreate item
+            if item.id_parent != myPNTaxa.id_parent: 
+                self.removeItem(myPNTaxa)
+                self.addItem(myPNTaxa)            
+            else: #update the item data
+                item.taxaname = myPNTaxa.taxaname
+                item.authors = myPNTaxa.authors
+                item.id_rank = myPNTaxa.id_rank
+                item.published = False
+                if myPNTaxa.published is not None:
+                    item.published = myPNTaxa.published
+        else:
+            #if not exists, append the new item
+            self.addItem(myPNTaxa)
+        self.sortItems(self.sort_column, self.sort_order, TreeItem)
+
+    def refreshData(self, new_PNTaxa_items = None):
+    #refresh the entire model with the new items
+        if not new_PNTaxa_items:
+            new_PNTaxa_items = self.items
+        self.items = new_PNTaxa_items
+        #reset the model and setup the new data
+        self.beginResetModel()
+        self.rootItem = TreeItem(None)
+        self.setupModelData()
+        self.endResetModel()
+
+    def setupModelData(self):
+    #if append is True, the model will not be reset and will append the new items to the existing model    
         # and create all the root item
-        parent_nodes = {}
-        if self.show_orphelins:
-            parent_nodes = {0: self.rootItem}
-        for item in items:
+        # if not append:
+        #     self.parent_nodes = {}
+        #     if self.show_orphelins:
+        #         self.parent_nodes = {0: self.rootItem}
+    # first loop to detect parents (id_parent is None)
+        for item in self.items:
             idparent = getattr(item, 'id_parent', None)
+            #if no parent, create a root item
             if idparent is None:
                 idtaxonref = item.idtaxonref
-                if idtaxonref not in parent_nodes:
-                    parent_nodes[idtaxonref] = TreeItem(item, self.rootItem)
-                    self.rootItem.appendChild(parent_nodes[idtaxonref])
-        # second loop to create the children
-        # and add them to their parent
-        for item in items:
+                if idtaxonref not in self.parent_nodes:
+                    self.parent_nodes[idtaxonref] = TreeItem(item, self.rootItem)
+                    self.rootItem.appendChild(self.parent_nodes[idtaxonref])
+    # second loop to create the children of the respective parent
+        for item in self.items:
             idparent = getattr(item, 'id_parent', 0)
-            if idparent in parent_nodes:
-                childItem = TreeItem(item, parent_nodes[idparent])
-                parent_nodes[idparent].appendChild(childItem)
+            if idparent in self.parent_nodes:
+                childItem = TreeItem(item, self.parent_nodes[idparent])
+                if item.idtaxonref in self.parent_nodes:
+                    _tmp = self.parent_nodes[item.idtaxonref]
+                    self.parent_nodes[idparent].childItems.remove(_tmp)
+                self.parent_nodes[item.idtaxonref] = childItem
+                self.parent_nodes[idparent].appendChild(childItem)
 
     def columnCount(self, parent=QtCore.QModelIndex()):
         return 2
@@ -1594,50 +1719,47 @@ class TreeModel(QtCore.QAbstractItemModel):
                 font.setItalic(True)
                 return font
         elif role == Qt.DecorationRole:
-            if col == 0 and item.itemData:
-                len_json = getattr(item.itemData, 'api_score', 0)
-                col = QtGui.QColor(0, 0, 0, 255)
-                if 1 <= len_json <= 2:
-                    col = QtGui.QColor(255, 128, 0, 255)
-                elif len_json == 3:
-                    col = QtGui.QColor(255, 255, 0, 255)
-                elif len_json >= 4:
-                    col = QtGui.QColor(0, 255, 0, 255)
+            if item.itemData:
                 px = QtGui.QPixmap(26, 12)
                 px.fill(QtCore.Qt.transparent)
-                #px_size = px.rect().adjusted(2, 2, -2, -2)
-
-                r1 = QtCore.QRect(1, 1, 10, 10)   # premier point à gauche
-                r2 = QtCore.QRect(15, 1, 10, 10)   # deuxième point à droite
-
-                
                 painter = QtGui.QPainter(px)
                 painter.setRenderHint(QtGui.QPainter.Antialiasing)
-                painter.setBrush(col)
+                if col == 0:
+                    len_json = getattr(item.itemData, 'api_score', 0)
+                    col = QtGui.QColor(0, 0, 0, 255)
+                    if 1 <= len_json <= 2:
+                        col = QtGui.QColor(255, 128, 0, 255)
+                    elif len_json == 3:
+                        col = QtGui.QColor(255, 255, 0, 255)
+                    elif len_json >= 4:
+                        col = QtGui.QColor(0, 255, 0, 255)           
+                    #px_size = px.rect().adjusted(2, 2, -2, -2)
+                    r1 = QtCore.QRect(1, 1, 10, 10)   # premier point à gauche
 
-                # if len_json == 0:
-                #     painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
-                #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                # else:
-                #     painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                #painter.drawEllipse(px_size)
-                painter.drawEllipse(r1)
-                published =getattr(item.itemData, 'published', True)
+                    painter.setBrush(col)
+                    # if len_json == 0:
+                    #     painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
+                    #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+                    # else:
+                    #     painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
+                    #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+                    #painter.drawEllipse(px_size)
+                    painter.drawEllipse(r1)
+                elif col == 1:
+                    published =getattr(item.itemData, 'published', True)
+                    r2 = QtCore.QRect(15, 1, 10, 10)   # deuxième point à droite
+                    if published :
+                        col = QtGui.QColor(0, 255, 0, 255)
+                        #painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
+                        #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+                    else:
+                        col = QtGui.QColor(255, 0, 0, 255)
+                        #painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
+                        #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
+                    painter.setBrush(col)
+                    painter.drawRects(r2)
 
-                if published :
-                    col = QtGui.QColor(0, 255, 0, 255)
-                    #painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
-                    #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                else:
-                    col = QtGui.QColor(255, 0, 0, 255)
-                    #painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                    #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                
-                painter.setBrush(col)
-                painter.drawRects(r2)
-
-                
+                    
                 painter.end()
 
                 return QtGui.QIcon(px)

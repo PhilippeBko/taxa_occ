@@ -242,3 +242,27 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical
 
 }
 
+/*----- QTreeView Checkboxes (indicator) -----*/
+QTreeView::indicator {
+    width: 13px;
+    height: 13px;
+    border: 1px solid #aaa;
+    background-color: #000; /* couleur de fond pour la case à cocher non cochée */
+}
+
+QTreeView::indicator:checked {
+    background-color: #fff;
+    border: 1px solid #000;
+}
+
+QTreeView::indicator:unchecked {
+    background-color: #000;
+    image: none;
+    border: 1px solid #aaa;
+}
+
+QTreeView::indicator:indeterminate {
+    background-color: gray;
+    image: none;
+    border: 1px solid #fff;
+}

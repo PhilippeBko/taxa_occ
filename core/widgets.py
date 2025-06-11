@@ -63,6 +63,9 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
             self.header().hide()
         self.dict_db_properties = {}
         self.id = None
+        # model = QtGui.QStandardItemModel()
+        # self.setModel(model)
+
         self.checkable = checkable
         link_delegate = LinkDelegate()
         self.setItemDelegate(link_delegate)
@@ -133,7 +136,7 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
         header = self.header()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
         if self.tab_header:
-            model.setHorizontalHeaderLabels(self.tab_header)
+            self.model().setHorizontalHeaderLabels(self.tab_header)
             for col in range(1, self.model().columnCount()):
                 header.setSectionResizeMode(col, QtWidgets.QHeaderView.Stretch)
         self.model().dataChanged.connect(self._validate)
@@ -234,6 +237,27 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
 
 #class to display a search widget composed of a search text and and treeview result with  matched taxa and score
 class PN_TaxaSearch(QtWidgets.QWidget):
+    """
+    The PN_TaxaSearch class is a custom class that inherits from QtWidgets.QWidget.
+    It is designed to display a search widget composed of a search text and a treeview result with matched taxa and score.
+
+    Attributes:
+        lineEdit_search_taxa (QtWidgets.QLineEdit): The search text input field.
+        treeview_scoretaxa (QtWidgets.QTreeView): The treeview widget that displays the search results.
+
+    Methods:
+        __init__ : Initializes the search widget.
+        setText : Sets the text of the search input field.
+        selectedTaxa : Returns the selected taxon object.
+        selectedTaxonRef : Returns the reference of the selected taxon.
+        selectedScore : Returns the score of the selected taxon.
+        selectedTaxaId : Returns the ID of the selected taxon.
+
+    Signals:
+        selectionChanged (str): Emitted when the selection in the treeview changes.
+        doubleClicked (object): Emitted when an item in the treeview is double-clicked.
+
+    """
     selectionChanged = pyqtSignal(str)
     doubleClicked = pyqtSignal(object)
     def __init__(self, parent=None):
@@ -347,6 +371,23 @@ class PN_TaxaSearch(QtWidgets.QWidget):
 
 #class to display a treeview with hiercharchical taxonomy
 class PN_TaxaQTreeView(QtWidgets.QTreeView):
+    """
+    The PN_TaxaQTreeView class is a custom class that inherits from QtWidgets.QTreeView.
+    It is designed to display a hierarchical taxonomic structure.
+    The class takes a PNTaxa object as input to define the taxonomic hierarchy.
+
+    Attributes:
+        None
+
+    Methods:
+        __init__ : Initializes the tree view window, disabling editing capabilities.
+        setdata : Defines the taxonomic hierarchy based on a PNTaxa object. It creates a SQL query to retrieve the hierarchy, executes the query, and populates the tree view with the results.
+        selecteditem : Returns a PNTaxa object corresponding to the selected item in the tree view.
+
+    Notes:
+        The setdata method is the primary method of the class, as it retrieves and populates the taxonomic hierarchy from a PNTaxa object.
+        The selecteditem method is a convenience function to retrieve the data of the selected item as a PNTaxa object.
+    """
     def __init__(self):
         super().__init__()
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
@@ -363,105 +404,88 @@ class PN_TaxaQTreeView(QtWidgets.QTreeView):
         except Exception:
             return
         str_idtaxonref = str(myPNTaxa.idtaxonref)
-        # extend to genus where id_rank >= genus (e.g. for species return all sibling species in the genus instead of only the species taxa)
-        if myPNTaxa.id_rank >= 14:
-            str_idtaxonref = "(SELECT * FROM taxonomy.pn_taxa_getparent(" + str_idtaxonref + ",14))"
-        # construct the Query statement, based on the Union betweens parents and childs
-        sql_query = "SELECT id_taxonref, id_rank, id_parent, taxaname,  coalesce(authors,'')::text authors, published FROM"
-        sql_query += "\n(SELECT id_taxonref, id_rank, id_parent, taxaname,  authors, published"
-        sql_query += "\nFROM taxonomy.pn_taxa_parents(" + str_idtaxonref + ", True)"
-        sql_query += "\nUNION SELECT id_taxonref, id_rank, id_parent, taxaname,  authors, published"
-        sql_query += "\nFROM taxonomy.pn_taxa_childs(" + str_idtaxonref + ", False)) a"
-        
-        # add a sqlwhere statement according to rank to limit the child deepth avoiding a mega-tree long to load for upper taxonomic rank (class, order,...)
-        if myPNTaxa.id_rank < 10:
-            sql_query += "\nWHERE a.id_rank <=10"
-        #add ordering
-        sql_query += "\nORDER BY a.id_rank, a.taxaname"
+        sql_where = ''
+        # extend to all taxa included in the genus when id_rank > genus (e.g. for species return all sibling species within the genus)
+        #or in other words, set to the genus rank when id_rank > genus
+        if myPNTaxa.id_rank > 14: #get the genus rank at minimum
+            str_idtaxonref = f"""(SELECT * FROM taxonomy.pn_taxa_getparent({str_idtaxonref},14))"""
+        if myPNTaxa.id_rank < 10: #limit the deepth to the families level
+            sql_where = "\nWHERE a.id_rank <=10"
+        # create the SQL query to get the hierarchy of taxa
+        sql_query = f"""SELECT 
+                            id_taxonref, id_rank, id_parent, taxaname,  coalesce(authors,'')::text authors, published 
+                        FROM
+                            (SELECT 
+                                id_taxonref, id_rank, id_parent, taxaname,  authors, published
+                            FROM    
+                                taxonomy.pn_taxa_parents({str_idtaxonref}, True)
+                            UNION 
+                            SELECT 
+                                id_taxonref, id_rank, id_parent, taxaname,  authors, published
+                            FROM 
+                                taxonomy.pn_taxa_childs({str_idtaxonref}, False)
+                            ) a
+                            {sql_where}
+                        ORDER BY 
+                            a.id_rank, a.taxaname
+                    """
         #print (sql_query)
         model = self.model()
         # model.setRowCount(0)
-        model.setColumnCount(4)
+        model.setColumnCount(2)
         # execute the Query and fill the treeview standarditemmodel based on search id_parent into the third column containing id_taxonref
         query = QtSql.QSqlQuery(sql_query)
         #set the taxon to the hierarchical model rank = taxon
         key_index = None
+        dict_idtaxonref = {}
         while query.next():
-            ls_item_taxonref = []
-            ls_item_taxonref = model.findItems(str(query.value('id_parent')), Qt.MatchRecursive, 2)  # MatchExactly
-            _rankname = functions.get_dict_rank_value(query.value('id_rank'),'rank_name')
-            ##query.value('rank_name'))
-            _taxonref = str(query.value('taxaname'))
-            _authors = str(query.value('authors')).strip()
-            if len(_authors) > 0 and not query.value('published'):
-                _authors = _authors + ' ined.' 
-            #if not _authors in (['', 'null']):
-            _taxonref = _taxonref.strip() + ' ' + _authors #str(query.value('authors'))
+            id_taxonref = query.value('id_taxonref')
+            idrank = query.value('id_rank')
+            taxaname = query.value('taxaname').strip()
+            authors = query.value('authors').strip()
+            published = query.value('published')
+            dict_item = {'idtaxonref': id_taxonref, 'taxaname': taxaname, 'authors': authors, 'published': published, 'idrank': idrank, 'parent': ''}
+            _rankname = functions.get_dict_rank_value(idrank,'rank_name')
+            ##set the authors and composite taxonref
+            if len(authors) > 0 and not published:
+                authors = authors + ' ined.' 
+            _taxonref = taxaname + ' ' + authors
             _taxonref = _taxonref.strip()
-
+            #create the QStandardItem for the taxon
             item = QtGui.QStandardItem(_rankname)
-            item1 = QtGui.QStandardItem(_taxonref) ##query.value('taxonref'))
-            item2 = QtGui.QStandardItem(str(query.value('id_taxonref')))
-            item4 = QtGui.QStandardItem(str(query.value('taxaname')))
-
-            if ls_item_taxonref:
+            item1 = QtGui.QStandardItem(_taxonref)
+            #search for a parent_item in the dictionnary of item
+            item_parent = dict_idtaxonref.get(query.value('id_parent'), None)
+            if item_parent:
                 # get the first col of the QStandardItem
-                row = ls_item_taxonref[0].row()
-                index = ls_item_taxonref[0].index()
-                index0 = index.sibling(row, 0)
+                index = item_parent.index()
+                dict_item["parent"] = index.data(Qt.UserRole).get('taxaname', '')
                 # append a child to the item
-                model.itemFromIndex(index0).appendRow([item, item1, item2, item4],) #, item3, item4, item5, item6, item7],)
-                # get a reference to the last append item
-                key_row = model.itemFromIndex(index0).rowCount()-1
-                key_item = model.itemFromIndex(index0).child(key_row, 0)
+                model.itemFromIndex(index).appendRow([item, item1],)
             else:
                 # append as a new line if item not found (or first item)
-                model.appendRow([item, item1, item2, item4],) #, item3, item4, item5, item6, item7],)
-                key_item = model.item(model.rowCount()-1)
-            # set bold the current id_taxonref line (2 first cells)
-            if not query.value('published'):
+                model.appendRow([item, item1],)
+            if item:
+                item.setData(dict_item, Qt.UserRole)
+                dict_idtaxonref[id_taxonref] = item
+            
+            # set bold the current id_taxonref line (2 first cells) and italized authors if not published
+            if not published:
                 font = QtGui.QFont()
                 font.setItalic(True)
-                key_index = key_item.index()
-                key_row = key_item.row()
-                #model.setData(key_index, font, Qt.FontRole)
-                key_index = key_index.sibling(key_row, 1)
-                model.setData(key_index, font, Qt.FontRole)
-
-            if query.value('id_taxonref') == myPNTaxa.idtaxonref:
+                model.setData(item1.index(), font, Qt.FontRole)
+            if id_taxonref == myPNTaxa.idtaxonref:
                 font = QtGui.QFont()
                 font.setBold(True)
-                key_index = key_item.index()
-                key_row = key_item.row()
-                model.setData(key_index, font, Qt.FontRole)
-                key_index = key_index.sibling(key_row, 1)
-                model.setData(key_index, font, Qt.FontRole)
+                key_index = item.index() #save key_index if found
+                model.setData(item.index(), font, Qt.FontRole)
+                model.setData(item1.index(), font, Qt.FontRole)
         if key_index:
             self.selectionModel().setCurrentIndex(key_index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
         self.setHeaderHidden(True)
         self.hideColumn(2)
-        self.hideColumn(3)
         self.expandAll()
 
     def selecteditem(self):
         #return a PNTaxa for the selected item into the hierarchical model
-        try:
-            parentname = self.currentIndex().parent().siblingAtColumn(3).data()
-        except Exception:
-            parentname =''
-        try:
-            id_taxonref = int(self.currentIndex().siblingAtColumn(2).data())
-            sql = f"SELECT id_rank, taxaname, authors, published FROM taxonomy.taxa_names WHERE id_taxonref ={id_taxonref}"
-
-            query = QtSql.QSqlQuery(sql)
-            query.next()
-            idrank = query.value('id_rank')
-            taxaname = query.value('taxaname')
-            authors = query.value('authors')
-            published = query.value('published')
-            dict_item = {'idtaxonref': id_taxonref, 'taxaname': taxaname, 'authors': authors, 'published': published, 'idrank': idrank, 'parent': parentname}
-            #item = PNTaxa(id_taxonref, taxaname, authors, idrank, published)
-            #item.parent_name = parentname
-            return dict_item
-        except Exception:
-            return
+        return self.currentIndex().siblingAtColumn(0).data(Qt.UserRole)

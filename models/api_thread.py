@@ -882,19 +882,19 @@ def test_signal(base,api_json):
 
 
 if __name__ == '__main__':
-    import models.taxa_model as taxa_model
+    # import models.taxa_model as taxa_model
     app=QtWidgets.QApplication(sys.argv)
-    #class_taxa = PNTaxa(123,'Zygogynum pancheri subsp. rivulare', 'DC.', 22)
-    class_taxa = taxa_model.PNTaxa(123,'Zygogynum bicolor', 'DC.', 21)
-    metadata_worker = TaxRefThread (app, class_taxa,"FLORICAL")
-    metadata_worker.Result_Signal.connect(test_signal)
+    # #class_taxa = PNTaxa(123,'Zygogynum pancheri subsp. rivulare', 'DC.', 22)
+    # class_taxa = taxa_model.PNTaxa(123,'Zygogynum bicolor', 'DC.', 21)
+    # metadata_worker = TaxRefThread (app, class_taxa,"FLORICAL")
+    # metadata_worker.Result_Signal.connect(test_signal)
     
 
-    #metadata_worker.set_taxaname("Miconia calvescens")
-    metadata_worker.PNTaxa_model = class_taxa
-    metadata_worker.start()
-     #metadata_worker.kill()
-        #window.identity_tableView.r22
+    # #metadata_worker.set_taxaname("Miconia calvescens")
+    # metadata_worker.PNTaxa_model = class_taxa
+    # metadata_worker.start()
+    #  #metadata_worker.kill()
+    #     #window.identity_tableView.r22
     
     app.exec_()
     sys.exit(app.exec_())
