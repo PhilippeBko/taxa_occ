@@ -46,7 +46,7 @@
     <item row="0" column="0">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QPushButton" name="themes_button">
+       <widget class="QPushButton" name="button_themes">
         <property name="maximumSize">
          <size>
           <width>100</width>
@@ -59,7 +59,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="toolButton">
+       <widget class="QToolButton" name="button_showFilter">
         <property name="text">
          <string>Filter</string>
         </property>
@@ -69,7 +69,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="group_button">
+       <widget class="QPushButton" name="button_rankGroup">
         <property name="text">
          <string>PushButton</string>
         </property>
@@ -132,7 +132,7 @@
         </property>
         <widget class="QFrame" name="frame_filter">
          <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
+          <enum>QFrame::Panel</enum>
          </property>
          <property name="frameShadow">
           <enum>QFrame::Raised</enum>
@@ -171,7 +171,7 @@
           </item>
          </layout>
         </widget>
-        <widget class="QTreeView" name="main_tableView">
+        <widget class="QTreeView" name="main_treeView">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
            <horstretch>1</horstretch>
@@ -311,7 +311,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="pushButtonMergeChilds">
+               <widget class="QPushButton" name="button_MergeNames">
                 <property name="maximumSize">
                  <size>
                   <width>100</width>

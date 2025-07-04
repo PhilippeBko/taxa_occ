@@ -53,6 +53,7 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
         refresh(): Refreshes the tree view with the current data.
         setData(json_data): Sets the data in the tree view from a JSON object.
         dict_user_properties(): Retrieves the data from the tree view and returns it as a dictionary.
+        dict_db_properties(): A dictionary containing the original json_data receive in the setdata() methods.
         _validate(): Compares the original data with the current data in the tree view and emits a signal if they are different.
     """
     changed_signal  = pyqtSignal(bool)
@@ -63,9 +64,6 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
             self.header().hide()
         self.dict_db_properties = {}
         self.id = None
-        # model = QtGui.QStandardItemModel()
-        # self.setModel(model)
-
         self.checkable = checkable
         link_delegate = LinkDelegate()
         self.setItemDelegate(link_delegate)
@@ -79,7 +77,7 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
     def setData(self, json_data):
     #set the json_data into the treeview model
         def _set_dict_properties (item_base, _dict_item):
-        #internal function to set recursively the data into the treeview model
+        #internal function to set recursively add the data into the treeview model
             if _dict_item is None : 
                 return
             for _key, _value in _dict_item.items():
@@ -116,33 +114,35 @@ class PN_JsonQTreeView(QtWidgets.QTreeView):
                     item_base.appendRow([item_key, item_value],)
 
 
-    #get the data from database to set the treeview widget model values
-        if json_data is None : 
-            return
+    #main part of the function
+    # set the treeview widget model values
         model = QtGui.QStandardItemModel()
         self.setModel(model)
-        self.dict_db_properties = json_data
+        if json_data is None : 
+            return
         try:
             #disconnect the changed event to avoid multiple validation processes
             self.model().dataChanged.disconnect(self._validate)
         except Exception:
             pass
-        _set_dict_properties (self.model(), self.dict_db_properties)
-        ##validate (and emit signal changed = false in theory !)
-        self._validate()
-        self.expandAll()
-
-        #ajust header
+        #add nodes to treeview from dict_db_properties
+        _set_dict_properties (self.model(), json_data)
+        self.dict_db_properties = json_data
+    #ajust header
         header = self.header()
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
         if self.tab_header:
             self.model().setHorizontalHeaderLabels(self.tab_header)
             for col in range(1, self.model().columnCount()):
                 header.setSectionResizeMode(col, QtWidgets.QHeaderView.Stretch)
+    ##validate and expand the treeview
+        self._validate()
+        self.expandAll()
+    ##connect the changed event to validate the data
         self.model().dataChanged.connect(self._validate)
 
     def dict_user_properties(self, item_base = None):
-    #get the json_data from the treeview model
+    #get the json_data from the treeview model (with changed values)
         tab_value = {}
         if item_base is None:
             item_base = self.model()

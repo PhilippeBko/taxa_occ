@@ -8,7 +8,7 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import QThread, pyqtSignal
 from bs4 import BeautifulSoup
 
-class TaxRefThread (QThread):
+class API_Thread (QThread):
     #rowSearch_Signal = pyqtSignal(str, str, str)
     Result_Signal = pyqtSignal(str, object)
     #key_tropicos = "afa96b37-3c48-4c1c-8bec-c844fb2b9c92"
@@ -32,6 +32,7 @@ class TaxRefThread (QThread):
 
     def run(self):
         _list_api = {}
+        #test for a effective connection
         try:
             requests.get("https://www.google.com", timeout=2)
         except Exception:
@@ -133,8 +134,8 @@ class API_Abstract ():
         except Exception:
             return ''
         
-    def get_children(self):
-        self.list_field = []
+    # def get_children(self):
+    #     self.list_field = []
 
     @property
     def metadata (self):
@@ -358,58 +359,53 @@ class API_ENDEMIA(API_Abstract):
         super().__init__()
         self.myTaxa = myPNTaxa
         _url_taxref = "https://api.endemia.nc/v1/taxons?q="+ self.myTaxa.simple_taxaname +'&section=flore&includes=synonyms'
-        self.todos = self.api_response (_url_taxref, 2)
         self.list_field["url"] =_url_taxref
-        
-    def get_metadata(self):
-        table_API = []
-        # try:
-        #     table_API = self.todos["data"][0]
-        # except Exception: 
-        #     return
-        
+        self.todos = self.api_response (_url_taxref, 2)
+        self.taxonAPI = {}
         try:
             tables_API = self.todos["data"]
         except Exception: 
             return
-        
         for i in range(len(tables_API)):
             _name = self._get_list_value (tables_API[i], "full_name")
             if _name.lower() == self.myTaxa.simple_taxaname.lower():
-                table_API = tables_API[i]
+                self.taxonAPI = tables_API[i]
                 break
-        if len(table_API) == 0:
+
+        
+    def get_metadata(self):
+        if not self.taxonAPI:
             return
 
         #get metadata on names
-        _name = self._get_list_value (table_API, "full_name")
+        _name = self._get_list_value (self.taxonAPI, "full_name")
         if _name is None: 
             return        
-        _id = self._get_list_value (table_API, "id")
+        _id = self._get_list_value (self.taxonAPI, "id")
         self.list_field["id"] =  str(_id)
         self.list_field["name"] = _name
         self.list_field["webpage"] = 'https://endemia.nc/flore/fiche'+ str(_id)
         try:
-            self.list_field["rank"] = self.translate_rank(self._get_list_value (table_API, "rank"))
+            self.list_field["rank"] = self.translate_rank(self._get_list_value (self.taxonAPI, "rank"))
         except Exception: 
             pass       
-        self.list_field["authors"] = self._get_list_value (table_API, "auteur")
+        self.list_field["authors"] = self._get_list_value (self.taxonAPI, "auteur")
         self.list_field["nomenclature"] =''        
-        if table_API["endemique"]:
+        if self.taxonAPI["endemique"]:
             self.list_field["status"] = "Endemic"
         self.list_field["habitat"] =''
-        self.list_field["protected"] = self._get_list_value (table_API, "protected")
+        self.list_field["protected"] = self._get_list_value (self.taxonAPI, "protected")
 
         #get details on protected status, nomenclature, habitat and images(= a 2nd query !)
         _url_taxref = "https://api.endemia.nc/v1/taxons/flore/"+ str(_id)
         _todos = self.api_response (_url_taxref, 2)
         try:
-            table_API = _todos["data"]["attributes"]
+            self.taxonAPI = _todos["data"]["attributes"]
         except Exception:
             return
-        self.list_field["redlist"] = self._get_list_value (table_API, "categorie_evaluation")  
-        self.list_field["nomenclature"] = self._get_list_value (table_API, "status")
-        self.list_field["habitat"] = self._get_list_value (table_API, "typehabitat")
+        self.list_field["redlist"] = self._get_list_value (self.taxonAPI, "categorie_evaluation")  
+        self.list_field["nomenclature"] = self._get_list_value (self.taxonAPI, "status")
+        self.list_field["habitat"] = self._get_list_value (self.taxonAPI, "typehabitat")
         
         #get synonyms
         t_synonyms = self.get_synonyms()
@@ -418,19 +414,21 @@ class API_ENDEMIA(API_Abstract):
         return self.list_field
 
     def get_synonyms(self):
+        if not self.taxonAPI:
+            return
+        
         table_API = []
         tab_synonyms = []        
         try:
-            table_API = self.todos["data"][0]["synonyms"]
+            table_API = self.taxonAPI["synonyms"]
         except Exception: 
             return
         for taxon in table_API:
             _name = taxon["full_name"].strip()
             if taxon["auteur"]:
                 _name = _name + ' ' + taxon["auteur"].strip()
-            if _name not in tab_synonyms:
-                if len(_name) > 0:
-                    tab_synonyms.append(_name.strip())
+            if len(_name) > 0 and _name not in tab_synonyms:
+                tab_synonyms.append(_name.strip())
         return tab_synonyms
 
     def get_children(self):
@@ -610,7 +608,7 @@ class API_IPNI(API_Abstract):
         self.myTaxa = myPNTaxa
 
     def get_metadata(self):
-        self.result_API = []
+        result_API = []
         self._rank = ''
         _taxa = self.myTaxa.simple_taxaname        
         if self.myTaxa.id_rank == 10:
@@ -628,30 +626,38 @@ class API_IPNI(API_Abstract):
         self.list_field["url"] =_url_taxref
         _todos = self.api_response (_url_taxref,2)
         try:
-            self.result_API = _todos["results"][0]
+            result_API = _todos["results"]
         except Exception: 
             return
-        _name = self._get_list_value (self.result_API, "name")
+        for i in range(len(result_API)):
+            _name = self._get_list_value (result_API[i], "name")
+            if _name.lower() == self.myTaxa.simple_taxaname.lower():
+                result_API = result_API[i]
+                break
+        if len(result_API) == 0:
+            return        
+
+        _name = self._get_list_value (result_API, "name")
         if _name is None: ##!= _taxa:
             return
         self.list_field["name"] = _name
-        self.list_field["family"] = self._get_list_value (self.result_API, "family")
-        self.list_field["authors"] = self._get_list_value (self.result_API, "authors")
+        self.list_field["family"] = self._get_list_value (result_API, "family")
+        self.list_field["authors"] = self._get_list_value (result_API, "authors")
         try:
-            self.list_field["rank"] = self.translate_rank[self._get_list_value (self.result_API, "rank")]
+            self.list_field["rank"] = self.translate_rank[self._get_list_value (result_API, "rank")]
         except Exception: 
             pass
 
-        _year = self._get_list_value (self.result_API, "publicationYear")
+        _year = self._get_list_value (result_API, "publicationYear")
         if len(_year) == 0:
-            self.list_field["year"] = self._get_list_value (self.result_API, "publicationYearNote")
+            self.list_field["year"] = self._get_list_value (result_API, "publicationYearNote")
         else:
             self.list_field["year"] = _year
-        self.list_field["publication"] = self._get_list_value (self.result_API, "reference")
+        self.list_field["publication"] = self._get_list_value (result_API, "reference")
         if len(self.list_field["year"]) >0:
             self.list_field["nomenclature"] ="Published"
 
-        _url_ipni = self.result_API["fqId"]
+        _url_ipni = result_API["fqId"]
         self.list_field["webpage"] ='https://www.ipni.org/n/'+ _url_ipni
         return self.list_field
 
@@ -680,8 +686,8 @@ class API_POWO(API_Abstract):
             return
         _url_taxref = "https://powo.science.kew.org/api/2/search?perPage=5000&cursor=%2A&q="+'&'+_rank +'='+_taxa +'&f=accepted_names'
         _url_taxref = _url_taxref.replace(' ','%20')
-        #increase the timeout to 7 to allow big queries (up to 5000 names)
-        _todos = self.api_response (_url_taxref, 7)
+        #increase the timeout to 20 seconds to allow big queries (up to 5000 names)
+        _todos = self.api_response (_url_taxref, 20)
         #try to get result JSON
         try:
             table_taxref = _todos["results"]
@@ -757,9 +763,18 @@ class API_POWO(API_Abstract):
         _todos = self.api_response (_url_taxref,2)
         self.list_field["url"] =_url_taxref
         try:
-            result_API = _todos["results"][0]
+            result_API = _todos["results"]
         except Exception: 
             return
+        for i in range(len(result_API)):
+            _name = self._get_list_value (result_API[i], "name")
+            if _name.lower() == self.myTaxa.simple_taxaname.lower():
+                result_API = result_API[i]
+                break
+        if len(result_API) == 0:
+            return
+        
+
         _name = self._get_list_value (result_API, "name")
 
         if self.myTaxa.id_rank == 31:
@@ -803,11 +818,20 @@ class API_TROPICOS(API_Abstract):
         _todos = self.api_response (_url_taxref,2)
         self.list_field["url"] =_url_taxref
         try :
-            result_API = _todos[0]
+            result_API = _todos
             _id = result_API["NameId"]
             self.id = result_API["NameId"]
         except Exception: 
             return 
+        for i in range(len(result_API)):
+            _name = self._get_list_value (result_API[i], "ScientificName")
+            if _name.lower() == self.myTaxa.simple_taxaname.lower():
+                result_API = result_API[i]
+                break
+        if len(result_API) == 0:
+            return        
+        
+
         _name = self._get_list_value (result_API, "ScientificName")
         if _name is None:
             return
@@ -886,7 +910,7 @@ if __name__ == '__main__':
     app=QtWidgets.QApplication(sys.argv)
     # #class_taxa = PNTaxa(123,'Zygogynum pancheri subsp. rivulare', 'DC.', 22)
     # class_taxa = taxa_model.PNTaxa(123,'Zygogynum bicolor', 'DC.', 21)
-    # metadata_worker = TaxRefThread (app, class_taxa,"FLORICAL")
+    # metadata_worker = API_Thread (app, class_taxa,"FLORICAL")
     # metadata_worker.Result_Signal.connect(test_signal)
     
 

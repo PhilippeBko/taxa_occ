@@ -8,7 +8,7 @@ import time
 from PyQt5 import uic, QtWidgets, QtCore
 from PyQt5.QtCore import Qt, QModelIndex   #, QSortFilterProxyModel
 ########################################
-from models.api_thread import TaxRefThread #, API_ENDEMIA
+from models.api_thread import API_Thread #, API_ENDEMIA
 from models.taxa_model import (TreeModel, PNTaxa,  PN_add_taxaname, PN_edit_taxaname, PN_merge_taxaname, PNSynonym, PN_edit_synonym)
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView
 from core.functions import (list_db_properties, get_dict_from_species, get_str_value, postgres_error, get_dict_rank_value)
@@ -103,12 +103,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window = uic.loadUi("ui/taxanames.ui")
         #self.current_selected_item = None
 
-    # setting the main_tableView)
-        self.tlview_taxonref = self.window.main_tableView
-        self.tlview_taxonref.header().setSortIndicator(0, Qt.AscendingOrder)
+    # setting the main_treeView
+        self.trview_taxonref = self.window.main_treeView
+        self.trview_taxonref.header().setSortIndicator(0, Qt.AscendingOrder)
         # connect the signal to the slot
-        self.tlview_taxonref.header().sortIndicatorChanged.connect(self.on_header_clicked) #self.tlview_taxonref.model().sort)
-        self.tlview_taxonref.setModel(TreeModel())
+        self.trview_taxonref.header().sortIndicatorChanged.connect(self.on_header_clicked)
+        self.trview_taxonref.setModel(TreeModel())
 
     # setting the combos
         self.combo_taxa = self.window.combo_taxa
@@ -133,8 +133,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.window.button_addNames.clicked.connect(self.button_addNames_click)   
         self.window.button_editNames.clicked.connect(self.button_editNames_click)
         self.window.button_delNames.clicked.connect(self.button_delNames_click)
-        self.window.pushButtonMergeChilds.clicked.connect(self.button_MergeChilds_click)
-        self.window.toolButton.toggled.connect(self.trView_filter_setVisible)
+        self.window.button_MergeNames.clicked.connect(self.button_MergeChilds_click)
+        self.window.button_showFilter.toggled.connect(self.trView_filter_setVisible)
         self.window.splitter.setSizes([0, 1])
 
         self.button_reset.clicked.connect (self.button_metadata_refresh)
@@ -160,7 +160,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rank_msg.setVisible(True)
         self.window.statusbar.addWidget(self.rank_msg)
     #set the group button (to select the group for displaying the list of taxa)
-        group_button = self.window.group_button
+        group_button = self.window.button_rankGroup
         group_button.setText("Division")
         group_menu = QtWidgets.QMenu()
         # create an exclusive action group for menu
@@ -180,7 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         group_button.setMenu(group_menu)
 
     #set the theme menu
-        theme_button = self.window.themes_button
+        theme_button = self.window.button_themes
         theme_button.setText("Diffnes")
         theme_menu = QtWidgets.QMenu()
         menu_items = ["Adaptic", "Combinear", "Diffnes",  "Lightstyle", "Obit", "SpyBot", "Geoo"]
@@ -229,20 +229,20 @@ class MainWindow(QtWidgets.QMainWindow):
     #connect signals
         self.PN_trview_identity.changed_signal.connect(self.trview_identity_changed)        
     #connect the thread
-        self.metadata_worker = TaxRefThread(app)
+        self.metadata_worker = API_Thread(app)
         self.metadata_worker.Result_Signal.connect(self.trview_metadata_setDataAPI)        
-    #initialize the tlview_taxonref (list of taxa)
+    #initialize the trview_taxonref (list of taxa)
         self.tlview_taxonref_setData()
 
     def on_header_clicked(self, column):
-    #event when the header is clicked to sort the tlview_taxonref
+    #event when the header is clicked to sort the trview_taxonref
         rootItem = None
-        model = self.tlview_taxonref.model()
-        order = self.tlview_taxonref.header().sortIndicatorOrder()
+        model = self.trview_taxonref.model()
+        order = self.trview_taxonref.header().sortIndicatorOrder()
         if not model:
             return
         #get the parent Node
-        selecteditem = model.data(self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = model.data(self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem:
             rootItem = model.getNode(selecteditem.id_parent)
         model.sortItems(column, order, rootItem)
@@ -250,13 +250,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def trView_filter_setVisible(self, state):
         #set the visibility of the filter treeview
         if not state:
+            #self.window.splitter.setVisible(False)
             self.window.splitter.setSizes([0, 1])
         else:
+            #self.window.splitter.setVisible(True)
             self.window.splitter.setSizes([300, 200])
 
     def theme_menu(self, item):
         #change the theme
-        self.window.themes_button.setText(item)
+        self.window.button_themes.setText(item)
         qss_file =  "ui/" + item + ".qss"
         with open(qss_file, "r") as f:
             app.setStyleSheet(f.read())
@@ -297,9 +299,9 @@ class MainWindow(QtWidgets.QMainWindow):
         #return a sql statement for deleting a synonym
         return f"SELECT taxonomy.pn_names_delete ('{synonym}')"
 
-    def sql_taxa_delete_reference(self, id_taxonref, do_update=False):
+    def sql_taxa_delete_reference(self, id_taxonref):
         #return a sql statement for deleting a reference name
-        return f"SELECT * FROM taxonomy.pn_taxa_delete ({id_taxonref}, {do_update})"
+        return f"SELECT taxonomy.pn_taxa_delete ({id_taxonref}) AS id_taxonref"
 
     def sql_taxa_get_names(self):
     #create a filter on taxa according to combo state and others filters (names)
@@ -309,12 +311,18 @@ class MainWindow(QtWidgets.QMainWindow):
         #get the grouped id_rank
         idrankparent = self.group_idrank()
         #get the dict_user properties
-        tab_filter = self.PN_trview_filter.dict_user_properties().copy()
+        tab_filter = self.PN_trview_filter.dict_user_properties() #.copy()
         #sql_where from the lineEdit_search
         txt_search = self.window.lineEdit_searchtaxon.text()
         txt_search = re.sub(r'[\*\%]', '', txt_search)
         if len(txt_search) > 0:
-            sql_where = f"\na.id_taxonref IN (SELECT (taxonomy.pn_taxa_childs(id_taxonref, true)).id_taxonref id_taxonref FROM taxonomy.pn_taxa_searchname('%{txt_search}%') GROUP by id_taxonref)"
+            sql_where = f"""\na.id_taxonref IN (
+                             SELECT 
+                                (taxonomy.pn_taxa_childs(id_taxonref, true)).id_taxonref id_taxonref 
+                            FROM 
+                                taxonomy.pn_taxa_searchname('%{txt_search}%') 
+                            GROUP 
+                                by id_taxonref)"""
             tab_sql.append(sql_where)
             nb_filter = 1
         ## sql for the filter (dict_user properties de self.PN_trview_filter)
@@ -336,9 +344,9 @@ class MainWindow(QtWidgets.QMainWindow):
             sql_where += sql_props
         #set color to button filter
         if nb_filter > 0:
-            self.window.toolButton.setStyleSheet("color: rgb(0, 55, 217);")
+            self.window.button_showFilter.setStyleSheet("color: rgb(0, 55, 217);")
         else:
-            self.window.toolButton.setStyleSheet("")
+            self.window.button_showFilter.setStyleSheet("")
     # add a filter for childs if idtaxonref is not None
         sql_join = ''
         index = self.combo_taxa.currentIndex()
@@ -386,32 +394,32 @@ class MainWindow(QtWidgets.QMainWindow):
         # return the sql_query
         return sql_query
 
-    def tlviews_clear(self):
-        # clear the contents of any tblview
-        self.PN_trview_identity.setModel(None)
-        self.PN_tlview_metadata.setModel(None)
-        self.trView_hierarchy.setModel(None) 
-        self.set_enabled_buttons()
+    # def tlviews_clear(self):
+    #     # clear the contents of any tblview
+    #     #self.PN_trview_identity.setModel(None)
+    #     #self.PN_tlview_metadata.setModel(None)
+    #     self.trView_hierarchy.setModel(None) 
+    #     self.set_enabled_buttons()
 
-    def tlviews_refresh(self, idtaxonref=0):
-        # save the current selected row
-        currentrow = self.tlview_taxonref.currentIndex().row()
-        # refresh the view
-        self.tlview_taxonref.repaint()
-        #return
-        # get the row (id_taxonref) in data of the sourceModel
-        row = -1 #self.tlview_taxonref.model().sourceModel().row_idtaxonref(idtaxonref)  # item.idtaxonref) ##id_taxonref)
-        if row == -1:
-            row = currentrow
-        row = max(0, min(row, self.tlview_taxonref.model().rowCount() - 1))
-        #item = self.tlview_taxonref.model().getItem(idtaxonref)
-        # get the index and obtain the source map index from the model itself
-        index = self.tlview_taxonref.model().index(row, 0)
-        index = self.tlview_taxonref.currentIndex()
-        self.tlview_taxonref.setCurrentIndex(QModelIndex())
-        #index = item.index()
-        #index = self.tlview_taxonref.model().mapFromSource(index)
-        self.tlview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
+    # def tlviews_refresh(self, idtaxonref=0):
+    #     # save the current selected row
+    #     currentrow = self.trview_taxonref.currentIndex().row()
+    #     # refresh the view
+    #     self.trview_taxonref.repaint()
+    #     #return
+    #     # get the row (id_taxonref) in data of the sourceModel
+    #     row = -1 #self.trview_taxonref.model().sourceModel().row_idtaxonref(idtaxonref)  # item.idtaxonref) ##id_taxonref)
+    #     if row == -1:
+    #         row = currentrow
+    #     row = max(0, min(row, self.trview_taxonref.model().rowCount() - 1))
+    #     #item = self.trview_taxonref.model().getItem(idtaxonref)
+    #     # get the index and obtain the source map index from the model itself
+    #     index = self.trview_taxonref.model().index(row, 0)
+    #     index = self.trview_taxonref.currentIndex()
+    #     self.trview_taxonref.setCurrentIndex(QModelIndex())
+    #     #index = item.index()
+    #     #index = self.trview_taxonref.model().mapFromSource(index)
+    #     self.trview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
     
     def combo_taxa_selectedItem(self, selecteditem):
         # select the selecteditem in the combo_taxa or create if not exist
@@ -426,23 +434,23 @@ class MainWindow(QtWidgets.QMainWindow):
             index = self.combo_taxa.count() - 1
             self.combo_taxa.setItemData(index, selecteditem, role=Qt.UserRole)
         self.combo_taxa.setCurrentIndex(index)
-        self.tlview_taxonref.expandAll()
+        self.trview_taxonref.expandAll()
 
-    def combo_taxa_deletedItem(self, selecteditem):
+    def combo_taxa_deletedItem(self, idtaxonref):
     #delete the selecteditem from the combo_taxa
         index = -1
         for i in range (self.combo_taxa.count()):
-            if self.combo_taxa.itemData(i, role=Qt.UserRole).idtaxonref == selecteditem.idtaxonref:
+            if self.combo_taxa.itemData(i, role=Qt.UserRole).idtaxonref == idtaxonref:
                 index = i
                 break
         if index != -1:
             self.combo_taxa.removeItem(index)
     
     def trview_names_setdata(self, selecteditem):
+        print ("set names data", selecteditem.idtaxonref)
         #self.PN_tlview_names.setData(self.get_similar_names(selecteditem.idtaxonref))
         self.PN_tlview_names.setData(selecteditem.json_names)
-        selection = self.PN_tlview_names.selectionModel()
-        selection.selectionChanged.connect(self.set_enabled_buttons)
+        self.PN_tlview_names.selectionModel().selectionChanged.connect(self.set_enabled_buttons)
 
     # def trview_names_changed(self, changed):
     #     value = False
@@ -455,11 +463,32 @@ class MainWindow(QtWidgets.QMainWindow):
     #     self.window.pushButtonDel.setEnabled(value)
     #     self.set_enabled_buttons()
 
-    def toolbox_click(self, index):
+    def toolbox_click(self, index = None):
+        if index is None:
+            index = self.window.toolBox.currentIndex()
         self.window.toolBox.setItemIcon(0, self.window.style().standardIcon(53))
         self.window.toolBox.setItemIcon(1, self.window.style().standardIcon(53))
         self.window.toolBox.setItemIcon(2, self.window.style().standardIcon(53))
         self.window.toolBox.setItemIcon(index, self.window.style().standardIcon(51))
+        selecteditem = self.trview_taxonref.model().data( self.trview_taxonref.currentIndex(), Qt.UserRole)
+        if index == 0 and self.PN_trview_identity.id != selecteditem.idtaxonref:
+            print ("set identity data", selecteditem.idtaxonref)
+            self.window.buttonBox_identity.setVisible(False)
+            if selecteditem.id_rank < 21:
+                identity_data = selecteditem.json_properties_count
+                self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+            else:
+                identity_data = selecteditem.json_properties
+                self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.CurrentChanged)
+                self.window.buttonBox_identity.setVisible(True)
+            #set the properties and metadata
+            self.PN_trview_identity.setData(identity_data)
+            #conserve the selected idtaxonref 
+            self.PN_trview_identity.id = selecteditem.idtaxonref
+        elif index == 1 and self.PN_tlview_metadata.id != selecteditem.idtaxonref:
+            print ("set metadata data", selecteditem.idtaxonref)
+            self.PN_tlview_metadata.setData (selecteditem.json_metadata)
+            self.PN_tlview_metadata.id = selecteditem.idtaxonref
 
     def trview_identity_changed(self, changed):
         self.buttonbox_identity.setEnabled(changed)
@@ -491,15 +520,27 @@ class MainWindow(QtWidgets.QMainWindow):
             if len(tab_tmp) > 0:
                 tab_result[key] = tab_tmp
         #query according to the len of the result (= Null if zero length)
+        _properties = 'NUL'
         if tab_result:
-            _data_list = json.dumps(tab_result)
-            sql_query = f"UPDATE taxonomy.taxa_reference SET properties = '{_data_list}'"
-        else:
-            sql_query = "UPDATE taxonomy.taxa_reference SET properties = NULL"
-        sql_query += f" WHERE id_taxonref = {id_taxonref} AND id_rank >= 21"
+            _properties = "'" + json.dumps(tab_result) + "'"
+        
+
+        sql_query = f"""UPDATE 
+                            taxonomy.taxa_reference 
+                        SET 
+                            properties = {_properties}
+                        WHERE 
+                            id_taxonref = {id_taxonref} 
+                        AND 
+                            id_rank >= 21
+                    """ 
+        # else:
+
+        #     sql_query = "UPDATE taxonomy.taxa_reference SET properties = NULL"
+        #sql_query += f" WHERE id_taxonref = {id_taxonref} AND id_rank >= 21"
 
         result = self.db.exec (sql_query)
-        code_error = result.lastError().nativeErrorCode ()
+        code_error = result.lastError().nativeErrorCode()
         if len(code_error) != 0:
             msg = postgres_error(result.lastError())
             QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
@@ -527,7 +568,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
     def group_idrank(self):
     #return the id_rank of the selected group (according to group_button text)
-        group_text = self.window.group_button.text()
+        group_text = self.window.button_rankGroup.text()
         idrankparent = get_dict_rank_value(group_text, 'id_rank')
         if not idrankparent:
             idrankparent = 14 
@@ -535,13 +576,15 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def group_menu_click(self, menu):
     #event when the group_menu is clicked
-        self.window.group_button.setText(menu)
+        self.window.button_rankGroup.setText(menu)
         self.tlview_taxonref_setData()
 
     def tlview_taxonref_click(self):
     #set the hierarchy, names, metadata and properties of the selected taxa
         #check if a previous changed has not be saved
         # check if the buttonbox_identity is enabled (if properties have been changed)
+        
+        
         if self.buttonbox_identity.isVisible() and self.buttonbox_identity.isEnabled():
                 msg = "Some properties have been changed, save the changes ?"
                 result = QtWidgets.QMessageBox.question(None, "Cancel properties", msg, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
@@ -550,52 +593,43 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.trview_identity_apply()
                    #self.buttonbox_identity.setEnabled(False)
         # clear lists
-        self.tlviews_clear()
+        #self.tlviews_clear()
         
         # get the current selectedItem
-        selecteditem = self.tlview_taxonref.model().data( self.tlview_taxonref.currentIndex(), Qt.UserRole)
-        #self.current_selected_item = selecteditem
+        selecteditem = self.trview_taxonref.model().data( self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem is None:
             return
-        #set the filter to None
-        if self.PN_trview_filter.model() is None:
-            filter_data = selecteditem.json_properties.copy()
-            self.PN_trview_filter.setData(self.set_values_to_none(filter_data))
         
-        #get the properties according to the id_rank
-        if selecteditem.id_rank < 21:
-            identity_data = selecteditem.json_properties_count
-            self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-            self.window.buttonBox_identity.setVisible(False)
-        else:
-            identity_data = selecteditem.json_properties
-            self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.CurrentChanged)
-            self.window.buttonBox_identity.setVisible(True)
-        #set the properties and metadata
-        self.PN_trview_identity.setData(identity_data)
-        #conserve the selected idtaxonref 
-        self.PN_trview_identity.id = selecteditem.idtaxonref
-        self.PN_tlview_metadata.setData (selecteditem.json_metadata)
+    #set the filter if the model is None (cf. buttons clear filter = Reset)
+        if self.PN_trview_filter.model() is None:
+            dict_db_properties = {}
+            for _key, _value in list_db_properties.items():
+                dict_db_properties[_key] = {}.fromkeys(_value,'')
+            self.PN_trview_filter.setData(dict_db_properties)
+    #set the metadata list
+        #self.PN_tlview_metadata.setData (selecteditem.json_metadata)
+        self.toolbox_click()
         self.trview_names_setdata(selecteditem)
-        #set the treetaxonomy hierarchy
-        if self.trView_hierarchy.model() is None :
-            self.trView_hierarchy.setdata (selecteditem)
-            self.set_enabled_buttons()
-            selection = self.trView_hierarchy.selectionModel()
-            selection.selectionChanged.connect(self.set_enabled_buttons)
+    #set the treetaxonomy hierarchy
+        #if self.trView_hierarchy.model() is None :
+        self.trView_hierarchy.setdata (selecteditem)
+        selection = self.trView_hierarchy.selectionModel()
+        selection.selectionChanged.connect(self.set_enabled_buttons)
+        self.set_enabled_buttons()
+
        
     def tlview_taxonref_dblclick(self, current_index):
         # Select or insert the selecteditem into the combo_taxa combobox for shortcut
-        selecteditem = self.tlview_taxonref.model().data(current_index, Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(current_index, Qt.UserRole)
         if selecteditem:
             self.combo_taxa_selectedItem(selecteditem)
 
     def tlview_taxonref_setData(self):
-        # Fill the main tlview_taxonref with the concacenate sql (cf.sql_reference_names)
-        # clean the content and selection of tlview_taxonref
-        self.tlview_taxonref.setCurrentIndex(QModelIndex())
+        # Fill the main trview_taxonref with the concacenate sql (cf.sql_reference_names)
+        # clean the content and selection of trview_taxonref
+        self.trview_taxonref.setCurrentIndex(QModelIndex())
         #tlview_similar.model().sourceModel().resetdata(None)
-        self.tlviews_clear()
+        #self.tlviews_clear()
         # search for a selected taxonref in combo_taxa
         index = self.combo_taxa.currentIndex()
         idtaxonref = self.combo_taxa.itemData(index, role=Qt.UserRole).idtaxonref        
@@ -617,30 +651,26 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 i += 1 
             data.append(item)
-            
-        # reset the model to the tableview for refresh
-        model_tableview = TreeModel(data)
-        self.tlview_taxonref.setModel(model_tableview)
-        #self.tlview_taxonref.expandAll()
-        #self.tlview_taxonref.selectionModel().selectionChanged.connect(self.tlview_taxonref_before_clickitem)
-        self.tlview_taxonref.selectionModel().selectionChanged.connect(self.tlview_taxonref_click)
-        self.tlview_taxonref.doubleClicked.connect(self.tlview_taxonref_dblclick)
-
-        # self.tlview_taxonref.model().sourceModel().resetdata(data)
-        self.tlview_taxonref.resizeColumnToContents(0)
-        total_width = self.tlview_taxonref.viewport().width()  # ou treeview.width()
-        self.tlview_taxonref.setColumnWidth(0, int(total_width * 2 / 3))
-        self.tlview_taxonref.hideColumn (2)
-
+        
         # Display row count within the statusbar
         msg = str(i) + " taxa"
         if i <= 1:
             msg = str(i) + " taxon"
         self.rows_msg.setText(msg)
-
-        #select the first row
-        selected_index = self.tlview_taxonref.model().index(row,0)
-        self.tlview_taxonref.selectionModel().setCurrentIndex(
+            
+        # reset the model to the tableview for refresh
+        model_tableview = TreeModel(data)
+        self.trview_taxonref.setModel(model_tableview)
+        self.trview_taxonref.resizeColumnToContents(0)
+        total_width = self.trview_taxonref.viewport().width()
+        self.trview_taxonref.setColumnWidth(0, int(total_width * 2 / 3))
+        #self.trview_taxonref.hideColumn (2)
+        
+        self.trview_taxonref.selectionModel().selectionChanged.connect(self.tlview_taxonref_click)
+        self.trview_taxonref.doubleClicked.connect(self.tlview_taxonref_dblclick)
+        #select the first row (and activate the signal tlview_taxonref_click)
+        selected_index = self.trview_taxonref.model().index(row,0)
+        self.trview_taxonref.selectionModel().setCurrentIndex(
                 selected_index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
 
 
@@ -648,20 +678,19 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def trview_metadata_setDataAPI(self, base, api_json):
         # receive the slot from metaworker - save the json into the database when finish (base = 'END')
-        selecteditem = self.tlview_taxonref.model().data(self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(self.trview_taxonref.currentIndex(), Qt.UserRole)
         _selecteditem = self.metadata_worker.PNTaxa_model
         sql_query =''
         _data_list = None
-
         if base == "NOTCONNECTED":
-            msg = "Error : no connection to the internet"
-            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            msg = "Error: no connection to the internet"
+            QtWidgets.QMessageBox.critical(None, "Connection error", msg, QtWidgets.QMessageBox.Ok)
             self.button_reset.setEnabled(True)
             return
         elif base == "END":
             self.button_reset.setEnabled(True)
             #metadata_worker.PNTaxa_model.json_request = None
-            if api_json is None: # when a kill
+            if api_json is None:
                 return
             tab_synonyms =[]
             #decompose synonyms and metadata
@@ -672,58 +701,73 @@ class MainWindow(QtWidgets.QMainWindow):
                     #api_json[taxa].pop("synonyms")
                 except Exception:
                     continue
-            #manage synonyms, search for duplicate
-            _taxaname=''
-            _parser=''
-            for taxa in tab_synonyms:
-                taxa = taxa.strip()
-                _taxaname += _parser +"'" +taxa.strip() +"'"
-                _parser=", "
-            #get the new names that are not in the taxa namespace (id_taxonref IS NULL)
-            sql_query = f"""
-                        SELECT 
-                            original_name 
-                        FROM 
-                            taxonomy.pn_taxa_searchnames( array[{_taxaname}]) 
-                        WHERE 
-                            id_taxonref IS NULL
-                        """
-            #sql_query = sql_query.replace('_taxaname', _taxaname)
-            query = self.db.exec (sql_query)
-            new_unique_taxa = []
-            while query.next():
-                new_unique_taxa.append (query.value("original_name"))
+            if tab_synonyms:
+                new_synonyms = 0
+                tab_synonyms = [taxa.strip() for taxa in tab_synonyms]
+                unique_set = set(tab_synonyms)
+                #add new synonyms names according to the previous query            
+                sql_insert = f"""
+                                SELECT 
+                                    taxonomy.pn_names_add ({_selecteditem.id_taxonref},'_synonymstr','Nomenclatural')
+                            """
+                for taxa in unique_set: #new_unique_taxa:
+                    dict_taxa = get_dict_from_species(taxa)
+                    if dict_taxa is None:
+                        dict_taxa = {}
+                        dict_taxa["names"] = [taxa]
+                    for value in dict_taxa["names"]:
+                        sql_query = sql_insert.replace('_synonymstr', str(value))
+                        try:
+                            #query = QtSql.QSqlQuery()
+                            result = self.db.exec(sql_query)
+                            code_error = result.lastError().nativeErrorCode()
 
-            #add new synonyms names according to the previous query            
-            sql_insert = f"""
-                            SELECT 
-                                taxonomy.pn_names_add ('_synonymstr','Nomenclatural',{selecteditem.id_taxonref})
-                        """
-            for taxa in new_unique_taxa:
-                dict_taxa = get_dict_from_species(taxa)
-                if dict_taxa is None:
-                    dict_taxa = {}
-                    dict_taxa["names"] = [taxa]
-                for value in dict_taxa["names"]:
-                    sql_query = sql_insert.replace('_synonymstr', str(value))
-                    try:
-                        #query = QtSql.QSqlQuery()
-                        self.db.exec(sql_query)
-                        #delete current model to ensure refresh of similar names
-                        #self.tlview_similar.setModel(None)
-                    except Exception:
-                        continue
+                        #if no errors, count new_names
+                            if len(code_error) == 0:
+                                new_synonyms += 1
+                        except Exception:
+                            continue
+                #refresh the tab names for the current selecteditem if newsynonyms
+                if new_synonyms > 0 and selecteditem == _selecteditem:
+                    self.trview_names_setdata(selecteditem)             
+                   #print (f"{new_synonyms} new names added to the database")
+                
+                #manage synonyms, search for duplicate
+            # _taxaname = ", ".join(f"'{taxa}'" for taxa in tab_taxa)
+
+            # #get the new names that are not in the taxa namespace (id_taxonref IS NULL)
+            # sql_query = f"""
+            #             SELECT 
+            #                 original_name 
+            #             FROM 
+            #                 taxonomy.pn_taxa_searchnames( array[{_taxaname}]) 
+            #             WHERE 
+            #                 id_taxonref IS NULL
+            #             """
+            # #sql_query = sql_query.replace('_taxaname', _taxaname)
+            # query = self.db.exec (sql_query)
+            # new_unique_taxa = []
+            # while query.next():
+            #     new_unique_taxa.append (query.value("original_name"))
+
+
             #manage and save json medata (including or not synonyms depends of the check line above)
             if api_json:
                 _data_list = json.dumps(api_json)
-                sql_query = f"UPDATE taxonomy.taxa_reference SET metadata = '{_data_list}'"
+                sql_query = f"""UPDATE 
+                                    taxonomy.taxa_reference 
+                                SET 
+                                    metadata = '{_data_list}'
+                                WHERE 
+                                    id_taxonref = {_selecteditem.id_taxonref}
+                            """
             # else:
             #     sql_query = "UPDATE taxonomy.taxa_reference SET metadata = NULL"
-                sql_query += f" WHERE id_taxonref = {_selecteditem.id_taxonref}"
+                #sql_query += f" WHERE id_taxonref = {_selecteditem.id_taxonref}"
                 self.db.exec(sql_query)
                 #update the value metadata from the selecteditem
                 _selecteditem.api_score = len(api_json)   
-                self.tlview_taxonref.repaint()         
+                self.trview_taxonref.repaint()         
         else:
             self.button_reset.setEnabled(False)
             #manage json in live ! coming from the metadata_worker api_thread, one by one
@@ -736,28 +780,27 @@ class MainWindow(QtWidgets.QMainWindow):
             self.PN_tlview_metadata.refresh()
             if get_str_value(api_json["name"]) != '':
                 _selecteditem.api_score +=1
-            self.tlview_taxonref.repaint()
+            self.trview_taxonref.repaint()
         return
     
 
         
 ### MANAGE buttons
     def set_enabled_buttons(self):
-        
         # set any button to enabled = False
         self.window.pushButtonAdd.setEnabled(False)
         self.window.pushButtonEdit.setEnabled(False)
         self.window.pushButtonDel.setEnabled(False)
-        self.window.pushButtonMergeChilds.setEnabled(False)
+        self.window.button_MergeNames.setEnabled(False)
         self.window.button_addNames.setEnabled(False)
         self.window.button_editNames.setEnabled(False)
         self.window.button_delNames.setEnabled(False)
         self.window.buttonBox_metadata.setEnabled(False)
-        self.window.group_button.setEnabled(False)
+        self.window.button_rankGroup.setEnabled(False)
         self.rank_msg.setText('< no selection >')
         
         # check if a taxon is selected
-        selected_taxa = self.tlview_taxonref.model().data(self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selected_taxa = self.trview_taxonref.model().data(self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selected_taxa is None:
             return
         elif not hasattr(selected_taxa, 'idtaxonref'):
@@ -767,10 +810,10 @@ class MainWindow(QtWidgets.QMainWindow):
         #if a taxon is selected....
         self.window.pushButtonAdd.setEnabled(True)
         self.window.buttonBox_metadata.setEnabled(True)
-        self.window.group_button.setEnabled(True)
+        self.window.button_rankGroup.setEnabled(True)
 
         #count childs (if exist) and set message for selected taxon
-        child_count = self.tlview_taxonref.model().rowCount(self.tlview_taxonref.currentIndex())
+        child_count = self.trview_taxonref.model().rowCount(self.trview_taxonref.currentIndex())
         if child_count == 0:
             child_count = ''
         elif child_count == 1:
@@ -798,133 +841,217 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         value = id_taxonref is not None
-        self.window.pushButtonMergeChilds.setEnabled(value)
+        self.window.button_MergeNames.setEnabled(value)
         self.window.button_addNames.setEnabled(value)
         self.window.button_delNames.setEnabled(value)
         self.window.button_editNames.setEnabled(value)
 
     def button_addNames_click(self):
         selecteditem = self.trView_hierarchy_selecteditem()
-        #selecteditem = tlview_taxonref.model().data(tlview_taxonref.currentIndex(), Qt.UserRole)
+        #selecteditem = trview_taxonref.model().data(trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem is None: 
             return
             
-        win = PN_add_taxaname(selecteditem, self.group_idrank())
+        win = PN_add_taxaname(selecteditem)
         win.apply_signal.connect(self.apply_edit)
         win.show()
 
     def button_editNames_click(self):
         selecteditem = self.trView_hierarchy_selecteditem()
-        #selecteditem = tlview_taxonref.model().data(tlview_taxonref.currentIndex(), Qt.UserRole)
+        #selecteditem = trview_taxonref.model().data(trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem is None:
             return
-        win = PN_edit_taxaname(selecteditem, self.group_idrank())
+        win = PN_edit_taxaname(selecteditem)
         win.apply_signal.connect(self.apply_edit)
         win.show()
     
     def apply_edit(self, ls_dict_tosave):
-    #call by the PN_add_taxaname or PN_edit_taxaname windows events when an update/add was done
+    #call by the PN_add_taxaname or PN_edit_taxaname windows events when an update/add was applyed
         if not isinstance(ls_dict_tosave, list):
             ls_dict_tosave = [ls_dict_tosave]
         ls_item_updated = []
         for dict_tosave in ls_dict_tosave:
-            ls_item_updated += self.database_save_taxon(dict_tosave)
-
+            idtaxonref_torefresh  = self.database_save_taxon(dict_tosave)
+            if idtaxonref_torefresh:
+                ls_item_updated.append(idtaxonref_torefresh) 
         if ls_item_updated:
-            self.sender().refresh(ls_item_updated)
             self.tlview_taxonref_refresh(ls_item_updated)
+            self.sender().refresh()
 
-    def tlview_taxonref_refresh(self, tab_items):
-        grouped_idrank = self.group_idrank()
-        model = self.tlview_taxonref.model()
-        #set the id_parent to grouped_idrank and refresh only visible items
-        first_item = None
-        for item in tab_items:
-            if item.id_rank == grouped_idrank:
-                item.id_parent = None
-            elif item.id_rank < 21:
-                continue
-            model.refresh(item)
-            if not first_item: #save the first item for selection
-                first_item = item
-        #re-initialise the current index to None to fire the event
-        self.tlview_taxonref.setCurrentIndex(QModelIndex())
-        #get the index of the first updated item
-        item = model.getNode (first_item.idtaxonref)
-        index = model.indexFromTreeItem(item)
-        self.tlview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
-        #repaint the tlview_taxonref
-        self.tlview_taxonref.repaint()
+    # def old_tlview_taxonref_refresh(self, tab_items):
+    #     grouped_idrank = self.group_idrank()
+    #     model = self.trview_taxonref.model()
+    #     #set the id_parent to grouped_idrank and refresh only visible items
+    #     first_item = None
+    #     for item in tab_items:
+    #         if item.id_rank == grouped_idrank:
+    #             item.id_parent = None
+    #         elif item.id_rank < 21:
+    #             continue
+    #         model.refresh(item)
+    #         if not first_item: #save the first item for selection
+    #             first_item = item
+    #     #re-initialise the current index to None to fire the event
+    #     self.trview_taxonref.setCurrentIndex(QModelIndex())
+    #     #get the index of the first updated item        
+    #     index = model.indexItem(first_item.idtaxonref)
+    #     self.trview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
+    #     self.trview_taxonref.expand(index)
+    #     #repaint the trview_taxonref
+    #     self.trview_taxonref.repaint()
 
 
     def database_save_taxon(self, dict_tosave):
-        #save a taxon in the database from a dictionnary :
-        #dict_tosave = {"idtaxonref":integer, "basename":text, "authors":text, "idparent":integer, "published":boolean, "idrank" :integer}
-        #and return a list of PNTaxa updated (PNTaxa1, PNTaxa2,...) with id_parent = self.group_idrank()
-        code_error =''
+        """ 
+            common function for update (add_name and edit_name)
+            Save a taxon in the database from a dictionnary :   
+            if parentname is present, it will update the taxon with id_parent = parentname (searching the id_parent from parentname)
+                dict_tosave = {"id_taxonref":integer, "basename":text, "authors":text, "parentname":text, "published":boolean, "id_rank" :integer}
+            if idparent is present, it will update the taxon with the id_parent (integer)
+                dict_tosave = {"id_taxonref":integer, "basename":text, "authors":text, "id_parent":integer, "published":boolean, "id_rank" :integer}
+                
+            return updated id_taxonref (new or updated) or None if error
+        """
+        code_error = ''
         msg = ''
-        idtaxonref = dict_tosave["idtaxonref"]
-        basename = dict_tosave["basename"].strip().lower()
-        published = dict_tosave["published"]
-        authors = dict_tosave["authors"].strip()
-        idrank = dict_tosave["idrank"]
-        if not idrank:
-            idrank = 'NULL'
+        return_idtaxonref = None
+        idtaxonref = dict_tosave.get("id_taxonref", None)
+        if idtaxonref is None:
+            return None
+        
+        basename = dict_tosave.get("basename", None)
+        if basename:
+            basename = basename.strip().lower()
+        else:
+            return None
+        #test for the types of update (according to specific fields)
         _parentname = dict_tosave.get("parentname", None)
-        _idparent = dict_tosave.get("idparent", None)
-        #create the from_query depending if parentname/id_parent are present into the dictionnayr dict_tosave
-        if _parentname is not None:# get the id_parent from the parentname (to add taxon)
+        _idparent = dict_tosave.get("id_parent", None)
+        #_idmerge = dict_tosave.get("id_merge", None)
+        # if _idmerge:
+        #     category = dict_tosave.get("category", "Nomenclatural")
+        #     sql_update = f"CALL taxonomy.pn_taxa_set_synonymy({idtaxonref}, {_idmerge}, '{category}');"
+        # else:
+        published = dict_tosave.get("published", None)
+        authors = dict_tosave.get("authors", "").strip()
+        authors = authors.replace("'", "''")  # escape single quotes
+        idrank = dict_tosave.get("id_rank", None)
+    #create the from_query depending if parentname/id_parent are present into the dictionnayr dict_tosave
+        if _parentname:# get the id_parent from the parentname (to add taxon)
             _parentname = _parentname.strip().lower()
-            sql_from = f"""(SELECT 
-                                (taxonomy.pn_taxa_edit ({idtaxonref}, taxa.basename, taxa.authors, taxa.id_parent, taxa.id_rank, TRUE)).* 
+            sql_update = f"""(SELECT 
+                                taxonomy.pn_taxa_edit ({idtaxonref}, taxa.basename, taxa.authors, taxa.id_parent, taxa.id_rank, {published}) AS id_taxonref 
                             FROM
                                 (
                                     SELECT 
                                         '{basename}' AS basename, 
                                         '{authors}' AS authors, 
-                                        {idrank} as id_rank, 
+                                        {idrank} as id_rank,
                                         a.id_taxonref AS id_parent
                                     FROM
                                         taxonomy.taxa_reference a
                                     WHERE 
                                         a.basename ='{_parentname}'
                                 ) taxa
-                            ) as result
+                            )
                         """
         elif _idparent:
-            sql_from = f"""taxonomy.pn_taxa_edit ({idtaxonref}, '{basename}', '{authors}', {_idparent}, {idrank}, {published})"""
+            sql_update = f"""SELECT 
+                                taxonomy.pn_taxa_edit ({idtaxonref}, '{basename}', '{authors}', {_idparent}, {idrank}, {published}) AS id_taxonref"""
         else:
             return
-        #manage the id_parent field
-        #field_idparent = f", taxonomy.pn_taxa_getparent(id_parent, {self.group_idrank()}) AS id_parent"
-        #create the final query
+        
+    #1 - execute the sql_update and get the id_taxonref (update or add), if no error 
+        sql_update = sql_update.replace("None", "NULL")
+        result = self.db.exec (sql_update)
+        code_error = result.lastError().nativeErrorCode()
+
+        #if no errors, set the id_taxonref to the dict_tosave
+        if len(code_error) == 0:
+            if result.next():
+                return_idtaxonref = result.value("id_taxonref")
+            dict_tosave["id_taxonref"] = return_idtaxonref            
+        else:
+            msg = postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+        return return_idtaxonref
+
+    
+    def tlview_taxonref_refresh(self, ls_idtaxonref):
+    #refresh (update) the trview_taxonref model according to a list of idtaxonref (refresh taxa + childs)
+    #return a list of PNTaxa updated (PNTaxa1, PNTaxa2,...)
+
+        if not isinstance(ls_idtaxonref, list):
+            ls_idtaxonref = [ls_idtaxonref]
+        if not ls_idtaxonref:
+            return []
+        
+        model = self.trview_taxonref.model()
+        #set the id_parent to grouped_idrank and refresh only visible items
+        first_item = None        
+    #2 - create and execute the query to get the childs from the database
+        # to refresh UI nodes in the model with the id_parent field
+        grouped_idrank = self.group_idrank()
         sql_query = f"""
                     SELECT 
+                        DISTINCT
                         id_taxonref, 
                         taxaname,
                         coalesce(authors,'') as authors, 
                         id_rank,
-                        taxonomy.pn_taxa_getparent(id_parent, {self.group_idrank()}) AS id_parent
+                        published,
+                        taxonomy.pn_taxa_getparent(id_parent, {grouped_idrank}) AS id_parent
                     FROM
-                        {sql_from}   
+                        (SELECT (taxonomy.pn_taxa_childs(id_taxonref, True)).*
+                         FROM 
+                            taxonomy.taxa_reference
+                         WHERE
+                            id_taxonref IN ({', '.join(map(str, ls_idtaxonref))})
+                        )
+                    WHERE 
+                        id_rank = {grouped_idrank}
+                         OR
+                            id_rank >= 21
         """
     
         #print (sql_query)
-        #execute query
+        #execute query and return a list of PNTaxa to update into the model
         result = self.db.exec (sql_query)
-        code_error = result.lastError().nativeErrorCode ()
+        code_error = result.lastError().nativeErrorCode()
+        ls_updated_items = []
         if len(code_error) == 0:#add a PNTaxa if save without errors
-            updated_datas = []
+            try:
+                #self.window.toolBox.currentChanged.disconnect(self.toolbox_click)
+                self.trview_taxonref.selectionModel().selectionChanged.disconnect(self.tlview_taxonref_click)
+            except Exception:
+                pass
             while result.next():
                 item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
-                                result.value("id_rank"), published)
-                item.id_parent = result.value("id_parent")
-                updated_datas.append(item)
-            return updated_datas
+                                result.value("id_rank"), result.value("published"))
+                if item.id_rank == grouped_idrank:
+                    item.id_parent = None
+                else:
+                    item.id_parent = result.value("id_parent")
+                ls_updated_items.append(item)
+                model.refresh(item)
+                
+            #re-initialise the current index to None to fire the event
+            index = self.trview_taxonref.currentIndex()
+            #get the index of the first updated item
+            if ls_updated_items:
+                first_item = ls_updated_items[0]
+                index = model.indexItem(first_item.idtaxonref)
+            #selected index
+            self.trview_taxonref.setCurrentIndex(QModelIndex())
+            self.trview_taxonref.selectionModel().selectionChanged.connect(self.tlview_taxonref_click)
+            self.trview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
+            self.trview_taxonref.expand(index)
+            #repaint the trview_taxonref
+            self.trview_taxonref.repaint()
         else:
             msg = postgres_error(result.lastError())
-        QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
-        return []
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+        return ls_updated_items
 
 
     def button_delNames_click(self):
@@ -939,18 +1066,44 @@ class MainWindow(QtWidgets.QMainWindow):
             None, "Delete a taxon", msg, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
         if result == QtWidgets.QMessageBox.No:
             return
-            # execute the suppression
-        sql_query = self.sql_taxa_delete_reference(selecteditem.id_taxonref, True)
+        #delete is confirmed
+        #get the list of the id_taxonref childs (affected by deleted on cascade)
+        sql_query = f"""SELECT 
+                            id_taxonref 
+                        FROM 
+                            taxonomy.pn_taxa_childs({selecteditem.id_taxonref}, True);
+                    """
         result = self.db.exec(sql_query)
-        if len(result.lastError().nativeErrorCode()) == 0:
-            # refresh the model after deleting the selected taxa and childs in dbase (returns any id_taxonref deleted)
+        code_error = result.lastError().nativeErrorCode()
+        ls_todelete = []
+        if len(code_error) == 0:
             while result.next():
-                #self.tlview_taxonref.model().sourceModel().delete(result.value("id_taxonref"))
-                item = self.tlview_taxonref.model().getItem(result.value("id_taxonref"))
-                if item:
-                    self.tlview_taxonref.model().removeItem(item)
-            self.tlviews_refresh(selecteditem.id_taxonref)
-            self.combo_taxa_deletedItem(selecteditem)
+                ls_todelete.append(result.value("id_taxonref"))
+        if not ls_todelete:
+            return
+        # execute the suppression into the database
+        sql_query = self.sql_taxa_delete_reference(selecteditem.id_taxonref)
+        result = self.db.exec(sql_query)
+        code_error = result.lastError().nativeErrorCode()
+        if len(code_error) == 0:
+            try:
+                #self.window.toolBox.currentChanged.disconnect(self.toolbox_click)
+                self.trview_taxonref.selectionModel().selectionChanged.disconnect(self.tlview_taxonref_click)
+            except Exception:
+                pass
+            # refresh the model after deleting the selected taxa and childs in dbase (returns any id_taxonref deleted)
+            for idtaxonref in ls_todelete:
+                # remove the item from the model
+                self.trview_taxonref.model().removeItem(idtaxonref)
+                self.combo_taxa_deletedItem(idtaxonref)
+                
+            index = self.trview_taxonref.currentIndex()
+            self.trview_taxonref.setCurrentIndex(QtCore.QModelIndex())
+            self.trview_taxonref.selectionModel().selectionChanged.connect(self.tlview_taxonref_click)
+            self.trview_taxonref.selectionModel().setCurrentIndex(index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
+            self.trview_taxonref.expand(index)
+            #repaint the trview_taxonref
+            self.trview_taxonref.repaint()
         else:
             msg = postgres_error(result.lastError())
             QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
@@ -962,19 +1115,32 @@ class MainWindow(QtWidgets.QMainWindow):
             selecteditem = self.trView_hierarchy_selecteditem()
             win = PN_merge_taxaname(selecteditem)
             win.show()
-
-            #refresh the tlview_taxonref (win.main_tableView)
+            #refresh the trview_taxonref (win.main_tableView)
             if win.updated:
-                # deleted the merge taxa
-                self.tlview_taxonref.model().sourceModel().delete(selecteditem.idtaxonref)
-                # update the sub-taxas properties
-                for item in win.updated_datas:
-                    self.tlview_taxonref.model().sourceModel().refresh(item)
-            # refresh the entire view
-                self.tlview_taxonref.model().sourceModel().refresh()
-                id_taxonref = win.selected_idtaxonref
-                # refresh the view
-                self.tlviews_refresh(id_taxonref)
+                idmerge = win.selected_idtaxonref
+                category = win.selected_category
+                from_idtaxonref = selecteditem.idtaxonref
+                sql_update = f"CALL taxonomy.pn_taxa_set_synonymy({from_idtaxonref}, {idmerge}, '{category}');"
+                result = self.db.exec (sql_update)
+                code_error = result.lastError().nativeErrorCode()
+                if len(code_error) == 0:
+                    # deleted the input taxa
+                    self.trview_taxonref.model().removeItem(from_idtaxonref)
+                    #refresh the destination taxa
+                    self.tlview_taxonref_refresh(idmerge)
+
+
+
+
+                # dict_tosave = {"id_taxonref":from_idtaxonref, "id_merge":idmerge, "category":category}
+                # #get the id_taxonref from the database (should be the same as idmerge)
+                # to_idtaxonref = self.database_save_taxon(dict_tosave)
+                # if to_idtaxonref:
+                #     # deleted the input taxa
+                #     self.trview_taxonref.model().removeItem(from_idtaxonref)
+                #     #refresh the destination taxa
+                #     self.tlview_taxonref_refresh(to_idtaxonref)
+                win.close()
         except Exception:
             return
 
@@ -999,7 +1165,7 @@ class MainWindow(QtWidgets.QMainWindow):
     #         if win.updated:
     #             # update the sub-taxas properties
     #             for item in win.updated_datas:
-    #                 self.tlview_taxonref.model().sourceModel().refresh(item)
+    #                 self.trview_taxonref.model().sourceModel().refresh(item)
     #         # refresh the view
     #             self.tlviews_refresh(selecteditem.idtaxonref)
     #     except Exception:
@@ -1007,10 +1173,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     # def button_addChilds_click(self):
-    #     #selecteditem = tlview_taxonref.model().data(tlview_taxonref.currentIndex(), Qt.UserRole)
+    #     #selecteditem = trview_taxonref.model().data(trview_taxonref.currentIndex(), Qt.UserRole)
     #     try:
-    #         row_index = self.tlview_taxonref.currentIndex()
-    #         selecteditem = self.tlview_taxonref.model().data(row_index, Qt.UserRole)
+    #         row_index = self.trview_taxonref.currentIndex()
+    #         selecteditem = self.trview_taxonref.model().data(row_index, Qt.UserRole)
     #         # int(self.trView_hierarchy.currentIndex().siblingAtColumn(2).data())
     #         id_taxonref = selecteditem.idtaxonref
     #         win = PN_edit_taxaname(id_taxonref, 1)
@@ -1019,7 +1185,7 @@ class MainWindow(QtWidgets.QMainWindow):
     #         if win.updated:
     #             for item in win.updated_datas:
     #                 # refresh the data
-    #                 self.tlview_taxonref.model().sourceModel().refresh(item)
+    #                 self.trview_taxonref.model().sourceModel().refresh(item)
 
     #         # refresh the view
     #             self.tlviews_refresh(id_taxonref)
@@ -1033,7 +1199,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def button_metadata_refresh(self):
         # get the selectedItem
-        selecteditem = self.tlview_taxonref.model().data(self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(self.trview_taxonref.currentIndex(), Qt.UserRole)
+        print (selecteditem.taxaname)
         self.button_reset.setEnabled(False)
         if self.metadata_worker.status == 1:
             self.metadata_worker.kill()
@@ -1043,13 +1210,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.metadata_worker.PNTaxa_model = selecteditem
         self.PN_tlview_metadata.dict_db_properties = {}
         self.metadata_worker.start()
-        self.tlview_taxonref.repaint()
+        self.trview_taxonref.repaint()
 
 
     def button_add_synonym(self):
         # get the selectedItem
-        selecteditem = self.tlview_taxonref.model().data(
-            self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(
+            self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem.idtaxonref == 0:
             return
         if self.PN_tlview_names.currentIndex().parent().isValid():
@@ -1063,8 +1230,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def button_edit_synonym(self):
         # get the selectedItem
-        selecteditem = self.tlview_taxonref.model().data(
-            self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(
+            self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem.idtaxonref == 0:
             return
         _syno = self.PN_tlview_names.currentIndex().data()
@@ -1079,8 +1246,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def button_delete_synonym(self):
-        selecteditem = self.tlview_taxonref.model().data(
-            self.tlview_taxonref.currentIndex(), Qt.UserRole)
+        selecteditem = self.trview_taxonref.model().data(
+            self.trview_taxonref.currentIndex(), Qt.UserRole)
         if selecteditem.idtaxonref == 0:
             return
         if not self.PN_tlview_names.currentIndex().parent().isValid():
@@ -1090,7 +1257,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         
         # message to be display first (question, Yes or Not)
-        msg = f"Are you sure to permanently delete this synonym {_currentsynonym}?"
+        msg = f"Are you sure to permanently delete this name {_currentsynonym}?"
         result = QtWidgets.QMessageBox.question(
             None, "Delete a synonym", msg, QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
         if result == QtWidgets.QMessageBox.No:
@@ -1098,7 +1265,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # execute the suppression
         sql_query = self.sql_taxa_delete_synonym(_currentsynonym)
         result = self.db.exec(sql_query)
-        if len(result.lastError().nativeErrorCode()) == 0:
+        code_error = result.lastError().nativeErrorCode()
+        if len(code_error) == 0:
             self.trview_names_setdata(selecteditem)
         else:
             msg = postgres_error(result.lastError())
