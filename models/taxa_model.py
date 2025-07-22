@@ -22,7 +22,7 @@ class PNTaxa(object):
         self.id_rank = idrank
         self.id_taxonref = idtaxonref
         self.published = published
-        self.api_score = 0
+        #self.taxaname_score = 0
         self.id_parent = None
         self.parent_name = None
         #self.id_rank_parent = None
@@ -124,16 +124,18 @@ class PNTaxa(object):
         json_data = json.loads(json_data)
         #sorted the result, assure to set web links and query time ending the dict
         for key, metadata in json_data.items():
-            _links = {'_links': None, 'url':None, 'webpage':None, 'query time': None}
+            _links = {'url':None, 'webpage':None, 'query time': None}
             _fields = {}
             for _key, _value in metadata.items():
                 if _key.lower() in _links:
                     _links[_key] = _value
                 else:
                     _fields[_key] = _value
-            for _link, _url in _links.items():
-                 if _url:
-                    _fields[_link] = _url
+            #add the links to the fields
+            _fields = _fields | _links
+            # for _key, _value in _links.items():
+            #      if _value:
+            #         _fields[_key] = _value
             json_data[key] = _fields
         return json_data
 
@@ -253,7 +255,25 @@ class PNTaxa(object):
         return dict_db_properties
 
 
-#class to generate a model (QAbstractTableModel) for QtableView widget to display taxa (PNTaxa) with red/green dot according to api_score (PNTaxa)
+
+class PNTaxa_with_Score(PNTaxa):
+    def __init__(self, idtaxonref, taxaname, authors, idrank, published = None):
+        super().__init__(idtaxonref, taxaname, authors, idrank, published)
+        self.taxaname_score = 0
+        self.api_total = 0
+
+    @property
+    def api_score(self):
+        if self.api_total > 0:
+            return 100 * self.taxaname_score / self.api_total
+        else: 
+            return 0
+    @property
+    def api_ratio(self):
+        txt = f"{self.taxaname_score}/{self.api_total}"
+        return txt
+
+#class to generate a model (QAbstractTableModel) for QtableView widget to display taxa (PNTaxa) with red/green dot according to taxaname_score (PNTaxa)
 # class TableModel(QtCore.QAbstractTableModel):
 #     header_labels = ['Taxa Name', 'Authors', 'Rank'] #, 'ID Taxon']
 #     def __init__(self, data = None):
@@ -339,7 +359,7 @@ class PNTaxa(object):
 #                     return font
 #             elif role == Qt.DecorationRole:
 #                 if col == 0:
-#                     len_json = getattr(item, 'api_score', 0)
+#                     len_json = getattr(item, 'taxaname_score', 0)
 #                     col = QtGui.QColor(0,0,0,255)
 #                     if 1<= len_json <= 2:
 #                         col = QtGui.QColor(255,128,0,255)
@@ -541,9 +561,11 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             self.window.taxaLineEdit_result.setVisible(True)
             self.taxaLineEdit_setdata()
             return
+        #index = self.window.tabWidget_main.currentIndex()
+        _apibase = self.window.tabWidget_main.tabText(index)
         self.window.taxaLineEdit_result.setVisible(False)
-        self.window.label_2.setText("Taxon not found")
-        
+        self.window.label_2.setText(f"Search for taxon to add from {_apibase.title()}...")
+
         self.window.buttonBox.button(QDialogButtonBox.Apply).setEnabled(False)
         QApplication.setOverrideCursor(QtGui.QCursor(Qt.WaitCursor))
         #get data (list of dictionnary) from API class function get_children"
@@ -556,8 +578,7 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             layout = QGridLayout()
             self.window.tabWidget_main.currentWidget().setLayout(layout)
         layout.addWidget(self.window.trView_childs)
-        index = self.window.tabWidget_main.currentIndex()
-        _apibase = self.window.tabWidget_main.tabText(index).lower()
+
                 #draw the list in the tree view
         model = self.window.trView_childs.model()
         model.setRowCount(0)
@@ -577,6 +598,7 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
         self.window.trView_childs.expandAll()
         self.window.trView_childs.resizeColumnToContents(0)
 
+        _apibase = _apibase.lower()
         QApplication.processEvents()
         if _apibase == 'taxref':
             _classeAPI = API_TAXREF(self.myPNTaxa)
@@ -586,15 +608,14 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             _classeAPI = API_POWO(self.myPNTaxa)
         elif  _apibase == 'florical':
             _classeAPI = API_FLORICAL(self.myPNTaxa)
-        _classeAPI.get_children()
+        
         table_taxa = {}
-        table_taxa = _classeAPI.children
+        table_taxa = _classeAPI.get_children()
         if not table_taxa or len(table_taxa) <= 1:
             table_taxa = {}
             #restore original cursor
         #self.window.trView_childs.model().setRowCount(0)
         self.window.trView_childs.repaint()
-
         # try:
         #     if len(table_taxa) == 0:
         #         table_taxa = {}
@@ -605,10 +626,13 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
             #sort the list (except root = 0) according to taxaname and create self.table_taxa
             item4.setText("Sorting data")
             self.window.trView_childs.repaint()
-            sort_taxa = []
+            #create a sorted list of unique item
+            sort_taxa = set()
             for taxa in table_taxa[1:]:
-                sort_taxa.append(taxa["taxaname"])
+                sort_taxa.add(taxa["taxaname"])
+            sort_taxa = list(sort_taxa)
             sort_taxa = sorted(sort_taxa)
+
             #add root first and then the sorted list
             self.table_taxa = []
             self.table_taxa.append(table_taxa[0])
@@ -620,21 +644,22 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
 
             #ajust the dictionnary, add special fields and construct the query
             _taxaname=''     
-            try:
-                for taxa in self.table_taxa:
-                    _tabtaxa = taxa["taxaname"].split()
-                    taxa["id_taxonref"] = 0
-                    taxa["id_parent"] = taxa["idparent"]
-                    del taxa["idparent"]
-                    taxa["basename"] = _tabtaxa[-1]
-                    taxa["authors"] = commons.get_str_value(taxa["authors"])
-                    taxa["parentname"] = self.get_table_taxa_item(taxa["id_parent"],"taxaname")
-                    taxa["id_rank"] =commons.get_dict_rank_value(taxa["rank"], "id_rank")
-                    taxa["published"] = len (taxa["authors"]) > 0
-                    _taxaname += f",'{taxa['taxaname']}'"
-                _taxaname = _taxaname.strip(',')
-            except Exception:
-                pass
+            #try:
+            for taxa in self.table_taxa:
+                
+                _tabtaxa = taxa["taxaname"].split()
+                taxa["id_taxonref"] = 0
+                taxa["id_parent"] = taxa["idparent"]
+                del taxa["idparent"]
+                taxa["basename"] = _tabtaxa[-1]
+                taxa["authors"] = commons.get_str_value(taxa["authors"])
+                taxa["parentname"] = self.get_table_taxa_item(taxa["id_parent"],"taxaname")
+                taxa["id_rank"] =commons.get_dict_rank_value(taxa["rank"], "id_rank")
+                taxa["published"] = len (taxa["authors"]) > 0
+                _taxaname += f",'{taxa['taxaname']}'"
+            _taxaname = _taxaname.strip(',')
+            # except Exception:
+            #     pass
             #check for already existing taxaname and set the id_taxonref if found
             sql_query = f"""
                             SELECT 
@@ -725,10 +750,12 @@ class PN_add_taxaname(QtWidgets.QMainWindow):
         
         draw_list_recursive(id)
         #add message to the label
+        index = self.window.tabWidget_main.currentIndex()
+        _api_name = self.window.tabWidget_main.tabText(index).title()
         if self.checkable > 0:
-            self.window.label_2.setText("Check the taxa to add")
+            self.window.label_2.setText("Check the taxa to add from " + _api_name)
         else:
-            self.window.label_2.setText("No new taxa to add")
+            self.window.label_2.setText("No new taxa to add from " + _api_name)
         #reconnect the itemChanged signal
         model.itemChanged.connect(self.trview_childs_checked_click) 
                     
@@ -1680,11 +1707,12 @@ class TreeModel(QtCore.QAbstractItemModel):
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid():
             return None
-
         item = index.internalPointer()
         col = index.column()
 
-        if role == Qt.DisplayRole:
+        if item.itemData is None:
+            return None
+        elif role == Qt.DisplayRole:
             return item.data(col)
         elif role == Qt.UserRole:
             return item.itemData
@@ -1693,80 +1721,80 @@ class TreeModel(QtCore.QAbstractItemModel):
                 font = QtGui.QFont()
                 font.setItalic(True)
                 return font
-        elif role == Qt.DecorationRole:
-            if item.itemData:
-                px = QtGui.QPixmap(26, 12)
+        elif col == 0 :
+            if role == Qt.DecorationRole:
+                px = QtGui.QPixmap(10, 10)
                 px.fill(QtCore.Qt.transparent)
                 painter = QtGui.QPainter(px)
                 painter.setRenderHint(QtGui.QPainter.Antialiasing)
-                if col == 0:
-                    len_json = getattr(item.itemData, 'api_score', 0)
-                    col = QtGui.QColor(0, 0, 0, 255)
-                    if 1 <= len_json <= 2:
-                        col = QtGui.QColor(255, 128, 0, 255)
-                    elif len_json == 3:
-                        col = QtGui.QColor(255, 255, 0, 255)
-                    elif len_json >= 4:
-                        col = QtGui.QColor(0, 255, 0, 255)           
-                    #px_size = px.rect().adjusted(2, 2, -2, -2)
-                    r1 = QtCore.QRect(1, 1, 10, 10)   # premier point à gauche
-
-                    painter.setBrush(col)
-                    # if len_json == 0:
-                    #     painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
-                    #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                    # else:
-                    #     painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                    #                               QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                    #painter.drawEllipse(px_size)
-                    painter.drawEllipse(r1)
-                elif col == 1:
-                    published =getattr(item.itemData, 'published', True)
-                    r2 = QtCore.QRect(15, 1, 10, 10)   # deuxième point à droite
-                    if published :
-                        col = QtGui.QColor(0, 255, 0, 255)
-                        #painter.setPen(QtGui.QPen(QtCore.Qt.white, 1,
-                        #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                    else:
-                        col = QtGui.QColor(255, 0, 0, 255)
-                        #painter.setPen(QtGui.QPen(QtCore.Qt.black, 1,
-                        #                          QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-                    painter.setBrush(col)
-                    painter.drawRects(r2)
-
-                    
+                _taxaname_score = item.itemData.api_score
+                colour = 1
+                if 1 <= _taxaname_score < 20:
+                    colour = QtGui.QColor(255, 0, 0)
+                elif 20 <= _taxaname_score < 50:
+                    colour = QtGui.QColor(255, 128, 0)
+                elif 50 <= _taxaname_score < 100:
+                    colour = QtGui.QColor(255, 255, 0)
+                elif _taxaname_score >= 100:
+                    colour = QtGui.QColor(0, 255, 0)
+                #px_size = px.rect().adjusted(2, 2, -2, -2)
+                #set the icon
+                r1 = QtCore.QRect(1, 1, 8, 8)
+                painter.setBrush(colour)
+                painter.drawEllipse(r1)
                 painter.end()
 
                 return QtGui.QIcon(px)
 
-        elif col == 0 and role == Qt.TextAlignmentRole:
-            if item.itemData and hasattr(item.itemData, 'id_rank') and item.itemData.id_rank >= 21:
-                return Qt.AlignRight | Qt.AlignVCenter
-            else:
-                return Qt.AlignLeft | Qt.AlignVCenter
-        elif role == Qt.ToolTipRole:
-            if col == 0 and item.itemData:
-                api_score = getattr(item.itemData, 'api_score', 0)
-                published = getattr(item.itemData, 'published', True)
+            elif role == Qt.TextAlignmentRole:
+                if hasattr(item.itemData, 'id_rank') and item.itemData.id_rank >= 21:
+                    return Qt.AlignRight | Qt.AlignVCenter
+                else:
+                    return Qt.AlignLeft | Qt.AlignVCenter
+            elif role == Qt.ToolTipRole:
+                #taxaname_score = getattr(item.itemData, 'taxaname_score', 0)
+                #api_total = getattr(item.itemData, 'api_total', 0)
+                published = getattr(item.itemData, 'published', False)
 
                 parts = []
-                # Explanation of the API score
-                parts.append(f"API Score: {api_score}")
-                if api_score == 0:
-                    parts.append("→ No API result")
-                elif api_score == 1:
-                    parts.append("→ Partial match")
-                elif api_score == 2:
-                    parts.append("→ Moderate match")
-                elif api_score == 3:
-                    parts.append("→ Good match")
-                elif api_score >= 4:
-                    parts.append("→ Excellent match")
-
+                # get  the API score
+                #taxaname_score = item.itemData.api_score
+                taxaname_ratio = item.itemData.api_ratio
+                # Explanation of the taxaname score
+                parts.append(f"API Score: {taxaname_ratio}")
+                # if taxaname_score == 0:
+                #     parts.append("→ No API metadata")
+                # elif taxaname_score < 20:
+                #     parts.append("→ Partial match")
+                # elif taxaname_score < 50:
+                #     parts.append("→ Moderate match")
+                # elif taxaname_score < 80:
+                #     parts.append("→ Good match")
+                # elif taxaname_score < 100:
+                #     parts.append("→ Excellent match")
+                # else:
+                #     parts.append("→ Full match")
                 # Explanation of the publication status
-                parts.append("Published" if published else "Not published")
-
+                parts.append("→ Published" if published else "→ Not published")
                 return "\n".join(parts)
+            
+        elif col == 1  and role == Qt.DecorationRole:
+            px = QtGui.QPixmap(26, 12)
+            px.fill(QtCore.Qt.transparent)
+            painter = QtGui.QPainter(px)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            published = getattr(item.itemData, 'published', False)
+            r2 = QtCore.QRect(1, 1, 10, 10)
+            colour = 1
+            if published:
+                colour = QtGui.QColor(0, 255, 0)
+            else:
+                colour = QtGui.QColor(255, 0, 0)
+            painter.setBrush(colour)
+            painter.drawRect(r2)
+            painter.end()
+            return QtGui.QIcon(px)
+        
 
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):

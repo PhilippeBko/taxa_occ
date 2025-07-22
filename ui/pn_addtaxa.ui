@@ -98,7 +98,7 @@
       <enum>QTabWidget::North</enum>
      </property>
      <property name="tabShape">
-      <enum>QTabWidget::Triangular</enum>
+      <enum>QTabWidget::Rounded</enum>
      </property>
      <property name="currentIndex">
       <number>0</number>
@@ -215,11 +215,6 @@
        <string>TAXREF</string>
       </attribute>
      </widget>
-     <widget class="QWidget" name="tab_4">
-      <attribute name="title">
-       <string>FLORICAL</string>
-      </attribute>
-     </widget>
      <widget class="QWidget" name="tab_5">
       <attribute name="title">
        <string>ENDEMIA</string>
@@ -246,6 +241,11 @@
         <bool>false</bool>
        </attribute>
       </widget>
+     </widget>
+     <widget class="QWidget" name="tab_4">
+      <attribute name="title">
+       <string>FLORICAL</string>
+      </attribute>
      </widget>
     </widget>
    </item>

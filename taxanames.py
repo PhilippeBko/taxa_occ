@@ -5,12 +5,12 @@ import re
 import json
 import time
 ########################################
-from PyQt5 import uic, QtWidgets, QtCore
+from PyQt5 import uic, QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import Qt, QModelIndex   #, QSortFilterProxyModel
 ########################################
 from models.api_thread import API_Thread #, API_ENDEMIA
-from models.taxa_model import (TreeModel, PNTaxa,  PN_add_taxaname, PN_edit_taxaname, PN_merge_taxaname, PNSynonym, PN_edit_synonym)
-from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView
+from models.taxa_model import (TreeModel, PNTaxa,  PNTaxa_with_Score, PN_add_taxaname, PN_edit_taxaname, PN_merge_taxaname, PNSynonym, PN_edit_synonym)
+from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaQTreeView, LinkDelegate
 from core.functions import (list_db_properties, get_dict_from_species, get_str_value, postgres_error, get_dict_rank_value)
 ########################################
 
@@ -91,6 +91,34 @@ class EditProperties_Delegate(QtWidgets.QStyledItemDelegate):
             # if model.data(index) != _value:
             #     model.setData(index.siblingAtColumn(0), font, Qt.FontRole)
             model.setData(index, _value)
+
+
+#class MetadataDelegateWithAuthorCheck is used to highlight the authors name in red if it does not match the current authors name
+#surcharging the LinkDelegate used to highlight the hyperlinks in the metadata treeview
+class MetadataDelegateWithAuthorCheck(LinkDelegate):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._authors_name = None
+
+    def set_authors_name(self, name):
+        self._authors_name = name
+
+    def paint(self, painter, option, index):
+        # Apply the superclass's paint method (web links)
+        super().paint(painter, option, index)
+
+        # Additional logic for column 1 and key
+        if index.column() == 1:
+            key = index.sibling(index.row(), 0).data(Qt.DisplayRole)
+            value = index.data(Qt.DisplayRole)
+            if key == "Authors" and value != self._authors_name:
+                # paint foreground in red if authors are different
+                option.palette.setColor(option.palette.Text, QtGui.QColor("red"))
+                super().paint(painter, option, index)  # repaint in red
+            elif value == 'No result':
+                # paint foreground in red if authors are different
+                option.palette.setColor(option.palette.Text, QtGui.QColor("red"))
+                super().paint(painter, option, index)  # repaint in red
 
 ##The MainWindow load the ui interface to navigate and edit taxaname###
 class MainWindow(QtWidgets.QMainWindow):
@@ -207,15 +235,20 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = self.window.toolBox.widget(2).layout()
         layout.insertWidget(0,self.PN_tlview_names)
     #set delegate for editing properties of PN_trview_identity
-        self.delegate = EditProperties_Delegate()
-        self.PN_trview_identity.setItemDelegate(self.delegate)
+        delegate = EditProperties_Delegate()
+        self.PN_trview_identity.setItemDelegate(delegate)
         self.PN_trview_identity.setEditTriggers(QtWidgets.QAbstractItemView.CurrentChanged)
+
     #set the filter treeview
         self.PN_trview_filter = PN_JsonQTreeView ()
         layout = self.window.frame_filter.layout()
         layout.insertWidget(1,self.PN_trview_filter)
-        self.PN_trview_filter.setItemDelegate(self.delegate)
+        self.PN_trview_filter.setItemDelegate(delegate)
         self.PN_trview_filter.setEditTriggers(QtWidgets.QAbstractItemView.CurrentChanged)
+
+        self.authors_delegate = MetadataDelegateWithAuthorCheck()
+        self.PN_tlview_metadata.setItemDelegate(self.authors_delegate)
+
     #set the buttons
         self.set_enabled_buttons()
 
@@ -375,22 +408,47 @@ class MainWindow(QtWidgets.QMainWindow):
                         UNION ALL
                         SELECT * FROM taxon
                     )
-                    SELECT a.id_taxonref, a.taxaname, a.authors, a.published, c.score_api, 
+                    SELECT a.id_taxonref, a.taxaname, a.authors, a.published, c.api_score, 
                            a.id_parent, a.id_rank
                     FROM all_taxa a
                     LEFT JOIN (
-                        SELECT id_taxonref, COUNT(*) AS score_api
-                        FROM (
-                            SELECT id_taxonref, jsonb_each(metadata) 
-                            FROM all_taxa
-                            WHERE metadata IS NOT NULL
-                        ) z
+                        SELECT id_taxonref, COUNT(*) AS api_score
+                        FROM all_taxa,
+                        LATERAL jsonb_each(metadata) AS j(key, value)
+                        WHERE metadata IS NOT NULL
                         GROUP BY id_taxonref
                     ) c
                     ON a.id_taxonref = c.id_taxonref
                     ORDER BY a.taxaname;
                 """
-        
+
+        # sql_query = f"""
+        #             WITH taxon AS (
+        #                 SELECT a.id_taxonref, a.taxaname, a.authors, a.published, a.metadata,
+        #                     taxonomy.pn_taxa_getparent(a.id_parent, {idrankparent}) AS id_parent,
+        #                     a.id_rank
+        #                 FROM taxonomy.taxa_names a
+        #                 {sql_join}
+        #                 {sql_where}
+        #             ),
+        #             parents AS (
+        #                 SELECT id_taxonref, taxaname, authors, published, metadata,
+        #                     -1::integer AS id_parent, {idrankparent}::integer as id_rank
+        #                 FROM taxonomy.taxa_names
+        #                 WHERE id_taxonref IN (SELECT DISTINCT id_parent FROM taxon)
+        #             ),
+        #             all_taxa AS (
+        #                 SELECT * FROM parents
+        #                 UNION ALL
+        #                 SELECT * FROM taxon
+        #             )
+        #             SELECT a.id_taxonref, a.taxaname, a.authors, a.published, 
+        #                    a.id_parent, a.id_rank,
+        #                    (a.metadata->'stats'->>'taxaname_score')::numeric AS taxaname_score,
+  		# 				   (a.metadata->'stats'->>'authors_score')::numeric AS authors_score
+        #             FROM all_taxa a
+        #             ORDER BY a.taxaname;
+        #         """        
         # return the sql_query
         return sql_query
 
@@ -450,6 +508,10 @@ class MainWindow(QtWidgets.QMainWindow):
         print ("set names data", selecteditem.idtaxonref)
         #self.PN_tlview_names.setData(self.get_similar_names(selecteditem.idtaxonref))
         self.PN_tlview_names.setData(selecteditem.json_names)
+        new_authors_name = selecteditem.authors  # par exemple, une valeur issue d'une sélection
+        
+        self.authors_delegate.set_authors_name(new_authors_name)
+
         self.PN_tlview_names.selectionModel().selectionChanged.connect(self.set_enabled_buttons)
 
     # def trview_names_changed(self, changed):
@@ -487,8 +549,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self.PN_trview_identity.id = selecteditem.idtaxonref
         elif index == 1 and self.PN_tlview_metadata.id != selecteditem.idtaxonref:
             print ("set metadata data", selecteditem.idtaxonref)
-            self.PN_tlview_metadata.setData (selecteditem.json_metadata)
+            dict_metadata = selecteditem.json_metadata
+            if dict_metadata is None:
+                dict_metadata = {}
+            #sort the jsonb according to the list of api
+            list_api = self.metadata_worker.list_api
+            dict_final = {}
+            for key in list_api:
+                dict_final[key] = dict_metadata.get(key, 'No result')
+            #set the metadata data
+            self.PN_tlview_metadata.setData (dict_final)
             self.PN_tlview_metadata.id = selecteditem.idtaxonref
+            #self.PN_tlview_metadata.collapseAll()
+
+
 
     def trview_identity_changed(self, changed):
         self.buttonbox_identity.setEnabled(changed)
@@ -642,9 +716,17 @@ class MainWindow(QtWidgets.QMainWindow):
             #select the row 
             if query.value("id_taxonref") == idtaxonref:
                 row = i
-            item = PNTaxa(query.value("id_taxonref"), query.value("taxaname"), query.value("authors"), 
+            item = PNTaxa_with_Score(query.value("id_taxonref"), query.value("taxaname"), query.value("authors"), 
                         query.value("id_rank"), query.value("published"))
-            item.api_score = query.value("score_api")
+            #set the taxaname_score and api_total
+            _total_api = len(self.metadata_worker.list_api)
+            item.taxaname_score = 0
+            item.api_total = 0
+            if _total_api > 0:
+                item.api_total = _total_api
+                item.taxaname_score = query.value("api_score")
+                
+            #item.authors_score = query.value("authors_score")
             item.id_parent = query.value("id_parent")
             if item.id_parent == -1:
                 item.id_parent = None
@@ -673,9 +755,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.trview_taxonref.selectionModel().setCurrentIndex(
                 selected_index, QtCore.QItemSelectionModel.ClearAndSelect | QtCore.QItemSelectionModel.Rows)
 
-
-
-    
+   
     def trview_metadata_setDataAPI(self, base, api_json):
         # receive the slot from metaworker - save the json into the database when finish (base = 'END')
         selecteditem = self.trview_taxonref.model().data(self.trview_taxonref.currentIndex(), Qt.UserRole)
@@ -701,6 +781,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     #api_json[taxa].pop("synonyms")
                 except Exception:
                     continue
+            #add new synonyms into the dbase to the id_taxonref
             if tab_synonyms:
                 new_synonyms = 0
                 tab_synonyms = [taxa.strip() for taxa in tab_synonyms]
@@ -730,30 +811,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 #refresh the tab names for the current selecteditem if newsynonyms
                 if new_synonyms > 0 and selecteditem == _selecteditem:
                     self.trview_names_setdata(selecteditem)             
-                   #print (f"{new_synonyms} new names added to the database")
-                
-                #manage synonyms, search for duplicate
-            # _taxaname = ", ".join(f"'{taxa}'" for taxa in tab_taxa)
-
-            # #get the new names that are not in the taxa namespace (id_taxonref IS NULL)
-            # sql_query = f"""
-            #             SELECT 
-            #                 original_name 
-            #             FROM 
-            #                 taxonomy.pn_taxa_searchnames( array[{_taxaname}]) 
-            #             WHERE 
-            #                 id_taxonref IS NULL
-            #             """
-            # #sql_query = sql_query.replace('_taxaname', _taxaname)
-            # query = self.db.exec (sql_query)
-            # new_unique_taxa = []
-            # while query.next():
-            #     new_unique_taxa.append (query.value("original_name"))
-
-
             #manage and save json medata (including or not synonyms depends of the check line above)
             if api_json:
+            #if the api_json is empty, do not save it
                 _data_list = json.dumps(api_json)
+                #test = []
+                # for key, value in _data_list.items():
+                #     _dict = {key: value}
+                #     test.append(_dict)
+
+                
+                #_data_list = list(api_json.items())
                 sql_query = f"""UPDATE 
                                     taxonomy.taxa_reference 
                                 SET 
@@ -761,13 +829,10 @@ class MainWindow(QtWidgets.QMainWindow):
                                 WHERE 
                                     id_taxonref = {_selecteditem.id_taxonref}
                             """
-            # else:
-            #     sql_query = "UPDATE taxonomy.taxa_reference SET metadata = NULL"
-                #sql_query += f" WHERE id_taxonref = {_selecteditem.id_taxonref}"
                 self.db.exec(sql_query)
-                #update the value metadata from the selecteditem
-                _selecteditem.api_score = len(api_json)   
-                self.trview_taxonref.repaint()         
+                #update the taxaname_score from the selecteditem
+                _selecteditem.taxaname_score = self.metadata_worker.total_api_calls
+                self.trview_taxonref.repaint()
         else:
             self.button_reset.setEnabled(False)
             #manage json in live ! coming from the metadata_worker api_thread, one by one
@@ -779,8 +844,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.PN_tlview_metadata.dict_db_properties[base] = api_json
             self.PN_tlview_metadata.refresh()
             if get_str_value(api_json["name"]) != '':
-                _selecteditem.api_score +=1
-            self.trview_taxonref.repaint()
+                _selecteditem.taxaname_score = self.metadata_worker.total_api_calls
+                self.trview_taxonref.repaint()
         return
     
 
@@ -1026,7 +1091,7 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 pass
             while result.next():
-                item = PNTaxa(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
+                item = PNTaxa_with_Score(result.value("id_taxonref"), result.value("taxaname"), result.value("authors"), 
                                 result.value("id_rank"), result.value("published"))
                 if item.id_rank == grouped_idrank:
                     item.id_parent = None
@@ -1206,7 +1271,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.metadata_worker.kill()
             while self.metadata_worker.isRunning():                
                 time.sleep(0.5)
-        selecteditem.api_score =0
+        selecteditem.taxaname_score =0
         self.metadata_worker.PNTaxa_model = selecteditem
         self.PN_tlview_metadata.dict_db_properties = {}
         self.metadata_worker.start()
