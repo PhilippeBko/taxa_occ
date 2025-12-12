@@ -65,11 +65,11 @@ list_db_identity = {
                     "y": {"synonyms" : ['y_coordinate','coord_y', 'coordy'], "type" : 'numeric', "min": 0,  "tip": 'Y coordinate on the plot'}, 
                 }
 
-list_db_fields = list_db_identity | list_db_traits
 list_month = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 list_strata = ["", "Understorey", "Sub-canopy", "Canopy", "Emergent"]
-list_db_fields["strata"]["items"] = list_strata
-list_db_fields["month"]["items"] = list_month
+list_db_traits["strata"]["items"] = list_strata
+list_db_identity["month"]["items"] = list_month
+list_db_fields = list_db_identity | list_db_traits
 list_numeric_db_fields = {key: value for key, value in list_db_fields.items() if value["type"] == "numeric"}
 
 
@@ -209,19 +209,14 @@ def get_dict_from_species(_taxa):
     tab_result = {}
     tab_result["original_name"] = _taxa   
     index = -1
-    #remove non-alphanumeric except space
-    #_taxa = re.sub (r'[0-9\sàâçèéêîôùû,;]',' ', _taxa)
     #standardize ssp, var and subsp
     _taxa = re.sub(r'\s+ssp\.?\s+',' subsp. ', _taxa)
     _taxa = re.sub(r'\s+subsp\s+',' subsp. ', _taxa)
     _taxa = re.sub(r'\s+var\s+',' var. ', _taxa)
     _taxa = re.sub(r'\s+forma\.?\s+',' f. ', _taxa)
-#    _taxa = re.sub('\s+|,|\.+$','', _taxa)
-    #delete end character (to improve, delete alla incorrect character at the end of the string)
-    #make several run to extract ending character unwaiting
     _taxa = _taxa.strip()
 
-    #split the resulting name
+    #split the resulting name, and exit if only one word
     tab_taxon = []
     tab_taxon = _taxa.split()
     if len(tab_taxon) < 2: 
@@ -230,7 +225,7 @@ def get_dict_from_species(_taxa):
     #by default consider a species binomial name = 'genus + epithet'    
     tab_result["name"] =''
     tab_result['genus'] = tab_taxon[0].title()
-    tab_result['species'] = tab_taxon[1].strip() #tab_result["name"]
+    tab_result['species'] = tab_taxon[1].strip()
     tab_result["name"] = ' '.join([tab_result['genus'],tab_result['species']])
     tab_result['prefix'] =''
     tab_result['infraspecies']=''
@@ -244,8 +239,6 @@ def get_dict_from_species(_taxa):
     if check_bn != tab_result['species']:
        return
 
-    _basename = tab_result['species']
-    _authors = ' '.join(tab_taxon[2:len(tab_taxon)])
     #check for infraspecific
     if 'subsp.' in tab_taxon:
         tab_result['prefix'] ='subsp.'
@@ -269,6 +262,8 @@ def get_dict_from_species(_taxa):
         tab_result['rank'] = 'Species'
 
     #get authors and basename considering autonyms and hybrids
+    _basename = tab_result['species']
+    _authors = ' '.join(tab_taxon[2:len(tab_taxon)])
     if tab_result['rank'] == 'Hybrid':
         tab_result['prefix'] ='x'
         _basename = tab_taxon[2]
@@ -286,27 +281,28 @@ def get_dict_from_species(_taxa):
         _authors =  ' '.join(tab_taxon[index+2:len(tab_taxon)])
         tab_result['infraspecies'] = _basename
         tab_result["name"] =' '.join([tab_result["name"],tab_result['prefix'], _basename])
-
     tab_result['basename'] = _basename.lower()
     
+    #clean empty values
     for value in tab_result.values():
-        #value = get_str_value(value)
         if value is None: 
             value =''
         value = value.strip()
         if value.lower() == 'null': 
             value =''
+        
+    #manage autonyms
     tab_result['autonym'] = (tab_result['infraspecies'] == tab_result['species'])
     if tab_result['autonym']:
         _authors = ''
+    #manage authors
     _authors = _authors.strip()
     if _authors.lower() in ['sensu', 'ined', 'ined.', 'comb. ined.', 'comb ined']: 
         _authors =''
-
     tab_result['authors'] = _authors
 
-    #tab_result =[]
-    tab_allnames=[]
+    #get a list of all the names according to nomenclature
+    tab_allnames = []
     _name = ' '.join([tab_result["genus"], tab_result["species"]])
     _authors = tab_result["authors"]
 
@@ -322,7 +318,7 @@ def get_dict_from_species(_taxa):
             _syno = ' '.join([_syno, _authors])
             tab_allnames.append(_syno.strip())
             #version for autonyms (name_authors_prefix_infra)
-            if tab_result["infraspecies"] == tab_result["species"]:
+            if tab_result['autonym']:
                 _syno = ' '.join([_name, _authors, tab_result["prefix"],tab_result["infraspecies"]])
                 tab_allnames.append(_syno.strip()) 
     else :

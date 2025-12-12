@@ -826,21 +826,21 @@ QCheckBox::indicator
 }
 
 
-QCheckBox::indicator:checked
-{
-    image:url("./ressources/check.png");
-	background-color: #002b2b;
-    border: 1px solid #3a546e;
-
+QCheckBox::indicator:checked {
+    background-color: rgb(0, 255, 0);
+    border: 1px solid darkgreen;
 }
 
 
-QCheckBox::indicator:unchecked:hover
-{
-	border: 1px solid #46a2da; 
-
+QCheckBox::indicator:unchecked {
+    background-color: rgb(255, 0, 0);
+    border: 1px solid darkred;
 }
 
+QCheckBox::indicator:indeterminate {
+    background-color: white;
+    border: 1px solid #555;
+}
 
 QCheckBox::disabled
 {

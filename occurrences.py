@@ -8,18 +8,13 @@ from PyQt5.QtCore import Qt, QSortFilterProxyModel, QItemSelectionModel, pyqtSig
 
 from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect
 from core.functions import list_db_fields, list_db_traits, get_str_value, postgres_error
-from models.taxa_model import PNSynonym, PN_edit_synonym
+from models.taxa_model import PNSynonym, PNSynonym_edit
 from models.occ_model import PN_taxa_resolution_model, PN_occ_model, PN_occ_tables, PN_occ_explore
 
 from import_csv import NonEditableModel, ComboBoxDelegate, CSVTranslate
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 #import pandas as pd
-
-
-
-
-
 
 
 class DataThread():
@@ -1355,7 +1350,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 msg = postgres_error(result.lastError())
                 QtWidgets.QtWidgets.QMessageBox.critical(self.ui_addname, "Database error", msg, QtWidgets.QtWidgets.QMessageBox.Ok)
         else:
-            class_newname = PN_edit_synonym (selecteditem)
+            class_newname = PNSynonym_edit (selecteditem)
             class_newname.show()
         self.tblView_resolution.repaint()
         column2_index = self.tblView_resolution.model().index(self.tblView_resolution.currentIndex().row(),1)
@@ -1511,7 +1506,7 @@ if __name__ == '__main__':
 #     if selecteditem.resolved == False:
 #         return
 #     new_synonym = PNSynonym (None, selecteditem.taxon_ref, selecteditem.idtaxonref)
-#     class_newname = PN_edit_synonym (new_synonym)
+#     class_newname = PNSynonym_edit (new_synonym)
 #     class_newname.show()
 #     if new_synonym.idsynonym > 0:
 #         #refresh self.tblView_resolution model (add synonym reference, NOT PERSISTENT IN DATABASE)
@@ -1523,7 +1518,7 @@ if __name__ == '__main__':
 #     selecteditem = table_view2.model().data(table_view2.currentIndex(), Qt.UserRole)    
 #     if table_view2.currentIndex().data() == None:
 #         return
-#     class_newname = PN_edit_synonym (selecteditem)
+#     class_newname = PNSynonym_edit (selecteditem)
 #     old_synonym = PNSynonym(selecteditem.synonym,'', 0) 
 #     class_newname.show()
 #     if class_newname.updated:
