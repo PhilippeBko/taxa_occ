@@ -216,6 +216,21 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="checkBox_checked">
+              <property name="font">
+               <font>
+                <pointsize>10</pointsize>
+               </font>
+              </property>
+              <property name="text">
+               <string>Checked</string>
+              </property>
+              <property name="checked">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
             <item alignment="Qt::AlignLeft">
              <widget class="QCheckBox" name="checkBox_published">
               <property name="sizePolicy">
@@ -279,6 +294,18 @@
             </item>
             <item>
              <widget class="QLabel" name="label_count">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>200</width>
+                <height>0</height>
+               </size>
+              </property>
               <property name="font">
                <font>
                 <pointsize>10</pointsize>
@@ -286,6 +313,9 @@
               </property>
               <property name="text">
                <string>TextLabel</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
               </property>
              </widget>
             </item>
@@ -357,7 +387,7 @@
                <enum>QLayout::SetMinimumSize</enum>
               </property>
               <item>
-               <widget class="QPushButton" name="button_addNames">
+               <widget class="QPushButton" name="button_reference_add">
                 <property name="maximumSize">
                  <size>
                   <width>100</width>
@@ -383,7 +413,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="button_editNames">
+               <widget class="QPushButton" name="button_reference_edit">
                 <property name="maximumSize">
                  <size>
                   <width>100</width>
@@ -409,7 +439,7 @@
                </widget>
               </item>
               <item>
-               <widget class="QPushButton" name="button_MergeNames">
+               <widget class="QPushButton" name="button_reference_merge">
                 <property name="maximumSize">
                  <size>
                   <width>100</width>
@@ -451,7 +481,7 @@
                </spacer>
               </item>
               <item>
-               <widget class="QPushButton" name="button_delNames">
+               <widget class="QPushButton" name="button_reference_remove">
                 <property name="maximumSize">
                  <size>
                   <width>100</width>
@@ -561,7 +591,7 @@
         <enum>QFrame::StyledPanel</enum>
        </property>
        <property name="currentIndex">
-        <number>0</number>
+        <number>2</number>
        </property>
        <property name="tabSpacing">
         <number>2</number>
@@ -571,8 +601,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>311</width>
-          <height>539</height>
+          <width>185</width>
+          <height>525</height>
          </rect>
         </property>
         <attribute name="label">
@@ -614,8 +644,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>175</width>
-          <height>44</height>
+          <width>183</width>
+          <height>539</height>
          </rect>
         </property>
         <attribute name="label">
@@ -667,8 +697,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>311</width>
-          <height>539</height>
+          <width>272</width>
+          <height>525</height>
          </rect>
         </property>
         <attribute name="label">
@@ -681,7 +711,7 @@
             <enum>QLayout::SetMinimumSize</enum>
            </property>
            <item>
-            <widget class="QPushButton" name="pushButtonAdd">
+            <widget class="QPushButton" name="button_synonym_add">
              <property name="text">
               <string>Add</string>
              </property>
@@ -710,7 +740,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="pushButtonEdit">
+            <widget class="QPushButton" name="button_synonym_edit">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
                <horstretch>0</horstretch>
@@ -733,7 +763,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="pushButtonDel">
+            <widget class="QPushButton" name="button_synonym_remove">
              <property name="text">
               <string>Remove</string>
              </property>

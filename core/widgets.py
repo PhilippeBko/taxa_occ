@@ -1,6 +1,10 @@
 ###########################################
 #imports
+import subprocess
+import os
 import webbrowser
+import json
+import re
 from PyQt5 import QtGui, QtSql, QtWidgets
 from PyQt5.QtCore import Qt, pyqtSignal,QEvent #, QItemSelectionModel
 #from core import functions
@@ -211,6 +215,7 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.dbopen = False
+        self.db = None
         frame = QtWidgets.QFrame(self)
         frame.setStyleSheet("background-color: transparent;")
         self.statusIndicator = QtWidgets.QWidget(frame)
@@ -225,26 +230,416 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
         frame_layout.addWidget(self.statusConnection)
         self.setLayout(frame_layout)
     
-    def open(self):
+    def open(self, db_name=''):
         import configparser
         config = configparser.ConfigParser()
         file_config = config.read('config.ini')
         section = 'database'
         if file_config and section in config.sections():
-            self.db = QtSql.QSqlDatabase.addDatabase("QPSQL")
+            self.db = QtSql.QSqlDatabase.addDatabase("QPSQL") #, db_name)
+
             self.db.setHostName(config['database']['host'])
             self.db.setUserName(config['database']['user'])
             self.db.setPassword(config['database']['password'])
             self.db.setDatabaseName(config['database']['database'])
             if self.db.open():
                 self.dbopen = True
-                default_db_name = QtSql.QSqlDatabase.database().databaseName()
+                default_db_name = self.db.databaseName()
+                host_name = self.db.hostName()
+                user_name = self.db.userName()
+                password = self.db.password()
                 if default_db_name:
                     self.statusIndicator.setStyleSheet("background-color: rgb(0, 255, 0); border-radius: 5px;")
                     self.statusConnection.setText("Connected : "+ default_db_name)
+                    self.run_sql_scripts(default_db_name, host_name, user_name, password)
             else:
                 self.db.close()
+                self.db = None
 
+    def run_sql_scripts(self, db_name, host, user, password):
+        # Vérifier si le schema existe
+        sql_query = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'taxonomy';"
+        query = self.db.exec(sql_query)
+        schema_exists = query.next()
+        if schema_exists:
+            return 
+
+    # Schema absent → exécuter les scripts
+        scripts = ['/home/birnbaum/Documents/Calédonie/sql/dbeaver/workspace6/data_occurrences/Scripts/taxa_occ/create_schema_taxonomy.sql',
+                   '/home/birnbaum/Documents/Calédonie/sql/dbeaver/workspace6/data_occurrences/Scripts/taxa_occ/config_schema_taxonomy.sql']
+        
+        for script_path in scripts:
+            if not os.path.isfile(script_path):
+                print (f"SQL File not found : {script_path}")
+
+            # send scripts to psql
+            cmd = [
+                "psql",
+                "-d", self.db.databaseName(),
+                "-h", host,
+                "-U", user,
+                "-f", script_path
+            ]
+            try:
+                # 
+                subprocess.run(cmd, capture_output=True, text=True, check=True)
+                #print(result.stdout)
+            except subprocess.CalledProcessError as e:
+                print (f"Error in execution {script_path} : {e.stderr}")
+
+        return 
+
+
+    def postgres_error(self, error):
+        #convert the postgresl error in a text
+        tab_text = error.text().split("\n")
+        return '\n'.join(tab_text[:3])
+    
+class PN_dbTaxa(PN_DatabaseConnect):
+    #a class to manage the database of taxa
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        #self.db = None
+
+    # def open(self):
+    #     super().open("db_taxa")
+
+    def db_get_apg4_clades (self):
+        #return the list of distinct clades from the apg4 table (field clade), [] if nothing
+        #typically ['ANA Grade', 'Ceratophyllales', 'Chloranthales', 'Core Eudicots', 'Magnoliids', 'Monocots']
+        #sql_query = "SELECT json_agg(DISTINCT a.group_taxa) AS json_list FROM taxonomy.wfo_order a WHERE a.group_taxa IS NOT NULL;"
+    
+        sql_query = """
+                    SELECT json_agg(DISTINCT clade) AS json_list 
+                    FROM
+                    (
+                        SELECT clade_apg AS clade FROM taxonomy.taxa_group
+                            UNION ALL
+                        SELECT group_taxa AS clade FROM taxonomy.taxa_group
+                    )
+                    WHERE clade IS NOT NULL
+                    ;
+                    """
+        #sql_query = "SELECT json_agg(DISTINCT a.group_taxa ||'-'|| a.clade_apg) AS json_list FROM taxonomy.wfo_order a;"
+
+        query = self.db.exec(sql_query)
+        if query.next():
+            result = query.value("json_list")
+            if result:
+                return json.loads(result)
+        return []
+
+    def db_get_json_taxa(self, grouped_idrank, dict_filter = None):
+        """
+            return a list of dictionnaries (dict_taxa) with taxaname infos from the database as
+                [{"id_taxonref":integer, "id_parent":integer, "id_rank" :integer, "taxaname":text, "authors":text, "published":boolean, "accepted":boolean, 
+                "taxaname_score":numeric, "authors_score":numeric"}, ...]
+            apply a filter on the query
+                dict_filter = {"id_taxonref" : integer, "search_name": text, "clade": text[None], "properties": dictionnary, "refresh": boolean[False]}
+                where :
+                refresh -> only return childs of idtaxonref impacted by a name change (avoid refresh all childs of a rank but only those linked by name combination)
+                properties -> a dictionnary as in properties field (cf. list_db_properties)
+        """
+        sql_where_taxa = ''
+        tab_sql = ["id_rank >= 21"]
+        nb_filter = 0
+        base_taxa = 'all_taxa'
+        #sql_from_taxa = "taxonomy.taxa_reference"
+        sql_inner_join_taxa =''
+
+        if dict_filter:
+        #1) text filter: sql_where_taxa from the lineEdit_search
+            txt_search = dict_filter.get("search_name", '')
+            if len(txt_search) > 0:
+                text_search = re.sub(r'[\*\%]', '', txt_search)
+                #return a sql statement for searching taxanames
+                #sql_taxa_searchNames = f"SELECT id_taxonref FROM taxonomy.pn_taxa_searchname ('%{text_search}%')"
+
+                sql_where_taxa = f"""\na.id_taxonref IN (SELECT id_taxonref FROM taxonomy.pn_taxa_searchname ('%{text_search}%'))"""
+                tab_sql.append(sql_where_taxa)
+                nb_filter = 1
+                
+            #2) properties filter: sql_where_taxa from the PN_trview_filter (get the dict_user properties=
+            tab_properties = dict_filter.get("properties", {})
+            for key, value in tab_properties.items():
+                for key2, value2 in value.items():
+                    if value2:
+                        _prop = "(properties  @> '{%key%:{%key2%:%value%}}')"
+                        _prop = _prop.replace('%', chr(34))
+                        _prop = _prop.replace('key2', key2)
+                        _prop = _prop.replace('key', key)
+                        _prop = _prop.replace('value', value2)
+                        tab_sql.append(_prop)
+                        nb_filter += 1
+            #3) set the id_taxonref
+            idtaxonref = dict_filter.get("id_taxonref", 0)
+            if idtaxonref >0:
+                _refresh = False #dict_filter.get("refresh", False)
+                #sql_inner_join_taxa = f"INNER JOIN taxonomy.pn_taxa_childs ({idtaxonref},True, {_refresh}) z ON z.id_taxonref = a.id_taxonref"
+                #tab_sql.append (f"a.id_taxonref IN (SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({idtaxonref},True, {_refresh}))")
+                sql_inner_join_taxa = f"""INNER JOIN 
+                                        (SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({idtaxonref},True)
+                                        UNION
+	                                    SELECT id_taxonref FROM taxonomy.pn_taxa_parents ({idtaxonref},False)
+                                        ) z ON a.id_taxonref = z.id_taxonref"""
+                    
+            #4) APG Filter: add a filter for APG clade
+            clade_sql = dict_filter.get("clade", None)
+            if clade_sql:
+                base_taxa = 'apg_taxa'
+            dict_filter["nb_filter"] = nb_filter
+        
+        #5) create query: set the final sql_query, including sql_where_taxa and sql_join
+        sql_where_taxa = f" WHERE id_rank = {grouped_idrank} OR (" + " AND ".join(tab_sql) + ")"
+        #sql_where_taxa += f" OR id_rank = {idrankparent}"
+        sql_query = f"""
+        WITH 
+            order_apg AS 
+                (SELECT DISTINCT
+                    b.id_taxonref AS id_order,
+                    taxonomy.pn_taxa_getparent(id_taxonref, {grouped_idrank}) AS id_parent --to change
+                FROM taxonomy.taxa_group a
+                INNER JOIN taxonomy.taxa_reference b ON lower(a.rank_order) = b.basename
+                WHERE b.id_rank = 8 
+                AND a.group_taxa = '{clade_sql}'
+                OR a.clade_apg = '{clade_sql}'
+                ),
+            all_taxa AS            
+                (SELECT a.id_taxonref, id_rank,
+                	CASE WHEN id_rank >=21 THEN taxonomy.pn_taxa_getparent(a.id_taxonref, {grouped_idrank})
+                	     ELSE id_parent
+                	END
+                	AS id_parent
+                    FROM taxonomy.taxa_reference a
+                    {sql_inner_join_taxa}
+                    {sql_where_taxa}
+                ),
+            apg_taxa AS
+                (SELECT DISTINCT a.id_taxonref, a.id_parent, a.id_rank
+                    FROM all_taxa a
+                    LEFT JOIN order_apg b ON a.id_taxonref = b.id_parent
+                    LEFT JOIN order_apg c ON taxonomy.pn_taxa_getparent(a.id_taxonref, 8) = c.id_order
+                    WHERE c.id_order IS NOT NULL OR b.id_parent IS NOT NULL
+                ),
+            score_taxa AS 
+                (SELECT 
+                    a.id_taxonref, b.id_parent, a.id_rank,
+                    a.taxaname, a.authors, a.published, a.accepted,
+                    (a.metadata->'score'->>'taxaname_score')::numeric AS taxaname_score,
+                    (a.metadata->'score'->>'authors_score')::numeric AS authors_score
+                    FROM {base_taxa} b
+                    INNER JOIN taxonomy.taxa_names a ON a.id_taxonref = b.id_taxonref
+                    ORDER BY taxaname
+                    )
+            SELECT json_agg(row_to_json(score_taxa)) FROM score_taxa;
+        """
+        #print(sql_query)
+        result = self.db.exec (sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return []
+        if result.next():
+            json_text = result.value(0)
+            if json_text:
+                return json.loads(json_text)
+        #print (sql_query)
+        return []
+
+
+    
+    def db_add_synonym(self, id_taxonref, synonym, category = 'Orthographic', error_msg = False):
+        #add a synonym to a id_taxonref, return True or False if error
+        sql_query = f"SELECT taxonomy.pn_names_add ({id_taxonref}, '{synonym}', '{category}')"
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid() and error_msg:
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return not result.lastError().isValid()
+
+    def db_edit_synonym(self, old_synonym, new_synonym, new_category = 'Orthographic'):
+        #edit a synonym return True or False if error
+        sql_query = f"SELECT taxonomy.pn_names_update ('{old_synonym}','{new_synonym}', '{new_category}')"
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return not result.lastError().isValid()
+
+    def db_delete_synonym(self, synonym):
+        #delete a synonym from the taxonomy.taxa_names table, return True or False if error
+        #sql_query = self.sql_taxa_delete_synonym(synonym)
+        sql_query = f"SELECT taxonomy.pn_names_delete ('{synonym}')"
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return True
+    
+    def db_update_properties (self, id_taxonref, json_properties):
+        #update the properties json of a taxonref from a json string, return True or False if error
+        if json_properties is None:
+            json_properties = 'NULL'
+        else:
+            json_properties = f"'{json_properties}'::jsonb"
+        sql_query = f"""UPDATE taxonomy.taxa_reference 
+                    SET properties = {json_properties}
+                    WHERE id_taxonref = {id_taxonref} AND id_rank >= 21;"""
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return True
+               
+    def db_update_metadata (self, id_taxonref, json_metadata):
+        #return sql statement to update the metadata json of a taxonref
+        if json_metadata is None:
+            json_metadata = 'NULL'
+        else:
+            json_metadata = f"'{json_metadata}'::jsonb"
+        sql_query = f"""UPDATE taxonomy.taxa_reference 
+                    SET metadata = {json_metadata}
+                    WHERE id_taxonref = {id_taxonref};"""
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return True
+    
+    def db_merge_reference (self, from_idtaxonref, to_idtaxonref, category='Orthographic'):
+        #set two taxa as synonyms
+        if to_idtaxonref == from_idtaxonref:
+            return False
+        sql_query = f"CALL taxonomy.pn_taxa_set_synonymy({from_idtaxonref}, {to_idtaxonref}, '{category}');"
+        result = self.db.exec(sql_query)
+        if result.lastError().isValid():
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+            return False
+        return True
+    
+    def db_delete_reference(self, id_taxonref):
+        #delete a reference in the taxonomy.taxa_reference table
+        # #return the list of id_taxonref deleted (including childs) or []
+        ls_todelete = []
+        #get the childs that will be deleted through foreign keys
+        #sql_query = self.sql_taxa_get_childs(id_taxonref, True)
+        sql_query = f"SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({id_taxonref}, True)"
+        result = self.db.exec(sql_query)
+        if not result.lastError().isValid():
+            while result.next():
+                ls_todelete.append(result.value("id_taxonref"))
+        # delete the id_taxonref (and childs through integrity constraints)
+        if ls_todelete:
+            #sql_query = self.sql_taxa_delete_reference(id_taxonref)
+            sql_query = f"SELECT taxonomy.pn_taxa_delete ({id_taxonref}) AS id_taxonref"
+            result = self.db.exec(sql_query)
+            if result.lastError().isValid():
+                msg = self.postgres_error(result.lastError())
+                QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+                return []
+        return ls_todelete
+    
+    def db_save_dict_taxa(self, dict_tosave): #database_save_taxon(dict_tosave):
+        #save a taxa dictionnary in the database, return id_taxonref (new or updated) or None if error
+        #dict_tosave = {"id_taxonref":integer, "id_parent":integer, "id_rank" :integer, "basename":text, "authors":text, "parentname":text[None], "published":boolean, "accepted":boolean}
+        code_error = ''
+        msg = ''
+        return_idtaxonref = None
+        idtaxonref = dict_tosave.get("id_taxonref", None)
+        if idtaxonref is None:
+            return None
+        
+        basename = dict_tosave.get("basename", None)
+        if basename:
+            basename = basename.strip().lower()
+        else:
+            return None
+        #test for the types of update (according to specific fields parentname or id_parent)
+        _parentname = dict_tosave.get("parentname", None)
+        _idparent = dict_tosave.get("id_parent", None)
+        published = dict_tosave.get("published", None)
+        accepted = dict_tosave.get("accepted", None)
+        authors = dict_tosave.get("authors", "").strip()
+        authors = authors.replace("'", "''")  # escape single quotes
+        idrank = dict_tosave.get("id_rank", None)
+
+    #create the from_query depending if parentname/id_parent are present into the dictionnayr dict_tosave
+    # if idtaxonref = 0 the function taxonomy.pn_taxa_edit will add a new taxonref, else edit the idtaxonref
+        if _parentname:# get the id_parent from the parentname
+            _parentname = _parentname.strip().lower() #.replace(' ', '')
+            sql_update = f"""(SELECT 
+                                taxonomy.pn_taxa_edit ({idtaxonref}, '{basename}', '{authors}', taxa.id_parent, {idrank}, {published},{accepted}) AS id_taxonref 
+                            FROM
+                                (SELECT 
+                                    a.id_taxonref AS id_parent
+                                FROM
+                                    taxonomy.taxa_nameset a
+                                WHERE 
+                                    lower(a.name) ='{_parentname}'
+                                ) taxa
+                            )
+                        """
+        elif _idparent:
+            sql_update = f"""SELECT 
+                                taxonomy.pn_taxa_edit ({idtaxonref}, '{basename}', '{authors}', {_idparent}, {idrank}, {published},{accepted}) AS id_taxonref"""
+        else:
+            return
+        
+    #1 - execute the sql_update and get the id_taxonref (update or add), if no error 
+        sql_update = sql_update.replace("None", "NULL")
+        #print (sql_update)
+        result = self.db.exec (sql_update)
+        code_error = result.lastError().nativeErrorCode()
+
+        #if no errors, set the id_taxonref to the dict_tosave
+        if len(code_error) == 0:
+            if result.next():
+                return_idtaxonref = result.value("id_taxonref")
+            #dict_tosave["id_taxonref"] = return_idtaxonref            
+        else:
+            msg = self.postgres_error(result.lastError())
+            QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
+        return return_idtaxonref
+    
+
+    # def sql_taxa_searchNames(self, text_search):
+    #     text_search = re.sub(r'[\*\%]', '', text_search)
+    #     #return a sql statement for searching taxanames
+    #     return f"SELECT id_taxonref FROM taxonomy.pn_taxa_searchname ('%{text_search}%')"
+
+
+
+    # def sql_apg4_clade_json (self):
+    #     #return sql statement to get the list of distinct clades from the apg4 table
+    #     return "SELECT json_agg(DISTINCT a.clade) AS json_list FROM taxonomy.apg4 a WHERE clade IS NOT NULL;"   
+
+
+    
+    # def sql_taxa_add_synonym(self, id_taxonref, synonym, category = 'Orthographic'):
+    #     #return a sql statement for adding a synonym
+    #     return f"SELECT taxonomy.pn_names_add ({id_taxonref}, '{synonym}', '{category}')"
+    
+    # def sql_update_metadata_json (self, id_taxonref, json_metadata):
+    #     #return sql statement to update the metadata json of a taxonref
+    #     return f"""UPDATE taxonomy.taxa_reference 
+    #                 SET metadata = '{json_metadata}'::jsonb
+    #                 WHERE id_taxonref = {id_taxonref};"""
+    # def sql_taxa_delete_synonym(self, synonym):
+    #     #return a sql statement for deleting a synonym
+    #     return f"SELECT taxonomy.pn_names_delete ('{synonym}')"
+    
+    # def sql_taxa_get_childs(self, id_taxonref, include_self=True):
+    #     #return a sql statement for getting the id_taxonref childs of a taxonref
+    #     return f"SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({id_taxonref}, {include_self})"
+    # def sql_taxa_delete_reference(self, id_taxonref):
+    #     #return a sql statement for deleting a reference name
+    #     return f"SELECT taxonomy.pn_taxa_delete ({id_taxonref}) AS id_taxonref"
 #class to display a search widget composed of a search text and and treeview result with  matched taxa and score
 class PN_TaxaSearch(QtWidgets.QWidget):
     """
