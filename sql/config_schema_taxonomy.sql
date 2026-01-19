@@ -208,7 +208,7 @@ STABLE
 AS $function$
 /*
 	SELECT * FROM taxonomy.pn_taxa_searchname('*anthus*')
-	SELECT * FROM taxonomy.pn_taxa_searchname('Osmanthus')
+	SELECT * FROM taxonomy.pn_taxa_searchname('Pouteria eg', 0.1)
 	SELECT * FROM taxonomy.pn_taxa_searchname('Zygogynum',0.6)
 	SELECT * FROM taxonomy.taxa_nameset where id_taxonref = 6314
  */
@@ -236,6 +236,10 @@ BEGIN
 				(SELECT w.id_taxonref, _keyname AS key_name 
 				 FROM taxonomy.taxa_nameset w
 				 WHERE levenshtein(metaphone(w.name, 5), metaphone(search_name, 5)) <2
+						OR w._keyname ILIKE '%' || search_name || '%'
+or levenshtein(w._keyname, search_name) <0.2 * length (search_name)
+
+--OR daitch_mokotoff(w._keyname) && daitch_mokotoff(search_name)
 				)
 			SELECT DISTINCT a.id_taxonref ::INTEGER, a.taxonref ::TEXT,  round(100*max(a.score)) ::INTEGER score
 			FROM 

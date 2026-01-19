@@ -13,10 +13,10 @@ from PyQt5 import uic, QtWidgets, QtCore, QtSql, QtGui
 from PyQt5.QtCore import Qt
 ########################################
 from models.occ_model import PN_taxa_resolution_model
-from models.taxa_model import PNSynonym
-from core.widgets import PN_JsonQTreeView, PN_DatabaseConnect, PN_TaxaSearch
+from models.taxa_model import PNSynonym, PN_TaxaSearch
+from core.widgets import PN_JsonQTreeView, PN_dbTaxa , PN_DatabaseConnect
 from core.functions import (get_str_value, get_all_names, get_reference_field, postgres_error, list_db_fields, 
-                           flower_reg_pattern, fruit_reg_pattern
+                           flower_reg_pattern, fruit_reg_pattern, AppContext, init_context
                            )
 ########################################
 
@@ -1453,6 +1453,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not connected_indicator.dbopen:
             return #return if not open
         self.db = connected_indicator.db
+        init_context(AppContext(connected_indicator))
         
         #self.trview_identity = self.ui.trView_resume
         self.PN_trview_identity = PN_JsonQTreeView ()

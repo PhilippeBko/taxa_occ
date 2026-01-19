@@ -1089,7 +1089,7 @@ class API_GBIF(API_Abstract):
         try:
             self.API_result = self.API_result[0]["alternatives"]
             self.get_taxon_from_API_Result("canonicalName", "usageKey",{"kingdom": "Plantae"})
-        except Exception as e:
+        except Exception:
             return
 
     def get_metadata(self):
@@ -1221,7 +1221,6 @@ class API_TROPICOS(API_Abstract):
             taxa["id_parent"] = 0
             _rank = self.translate_rank(taxa["RankAbbreviation"])
             _idrank = dict_idrank.get(_rank.lower(), 0)
-            #_idrank = commons.get_dict_rank_value(_rank, "id_rank")
             if _idrank < self.idrank:
                 continue
             _name = self.get_dict_value(taxa,"ScientificName")

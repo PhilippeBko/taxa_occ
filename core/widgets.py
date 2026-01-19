@@ -1,14 +1,19 @@
-###########################################
-#imports
-import subprocess
-import os
-import webbrowser
+# Standard library
 import json
+import os
 import re
+import subprocess
+import webbrowser
+
+# Third-party
 from PyQt5 import QtGui, QtSql, QtWidgets
-from PyQt5.QtCore import Qt, pyqtSignal,QEvent #, QItemSelectionModel
-#from core import functions
-###########################################
+from PyQt5.QtCore import Qt, pyqtSignal, QEvent
+
+# Internal
+from core import functions
+
+
+
 
 ##class LinkDelegate to create hyperlink of the QTreeView from Qtreeview_Json
 class LinkDelegate(QtWidgets.QStyledItemDelegate):
@@ -233,9 +238,20 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
     def open(self, db_name=''):
         import configparser
         config = configparser.ConfigParser()
-        file_config = config.read('config.ini')
+        config_file = functions.resource_path("config.ini")
+        read_files = config.read(config_file)
+
+        if not read_files:
+            print(f"Warning, unable to read the config file : {config_file}")
+            return False
+    
+
         section = 'database'
-        if file_config and section in config.sections():
+        if section not in config.sections():
+            print(f"Warning, section [{section}] not found in config file : {config_file}")
+            return False
+
+        if config.has_option(section, 'host') and config.has_option(section, 'user') and config.has_option(section, 'password') and config.has_option(section, 'database'):
             self.db = QtSql.QSqlDatabase.addDatabase("QPSQL") #, db_name)
 
             self.db.setHostName(config['database']['host'])
@@ -255,6 +271,40 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
             else:
                 self.db.close()
                 self.db = None
+    
+    def db_get_searchname(self, search_name, score = 0.4):
+    #this function Taxa is set in the PN_DatabaseConnect class to be shared between subclasses
+        """return a dictionnary where key = taxonref and value = a dictionnary (id_taxonref, score,  synonyms: List[str])
+            #ex: {'Amborella trichopoda Baill.': {"id_taxonref": 1802, "score": 0.95, "synonym": ['Amborella trichopodo', 'Amborella']}, ...}
+        """
+        if len(search_name) < 4:
+            return
+        if len(search_name) < 8:
+            score = 0.2
+        #create sql query
+        sql_query = f"""
+            SELECT 
+                a.taxonref, a.score, a.id_taxonref, json_agg(DISTINCT c.name ORDER BY c.name) AS synonym
+            FROM 
+                taxonomy.pn_taxa_searchname('{search_name}', {score}::numeric) a 
+            LEFT JOIN 
+                taxonomy.taxa_nameset c 
+            ON 
+                a.id_taxonref = c.id_taxonref AND c.category <> 1
+            GROUP BY a.taxonref, a.score, a.id_taxonref
+            ORDER 
+                BY score DESC
+        """
+        #execute sql_query and return json result
+        query = self.db.exec(sql_query)
+        dict_db_names = {}
+        while query.next():
+            dict_db_names[query.value("taxonref")] = {
+                "id_taxonref": query.value("id_taxonref"),
+                "score": query.value("score"),
+                "synonym": json.loads(query.value("synonym"))
+            }
+        return dict_db_names
 
     def run_sql_scripts(self, db_name, host, user, password):
         # Vérifier si le schema existe
@@ -296,14 +346,146 @@ class PN_DatabaseConnect(QtWidgets.QWidget):
         return '\n'.join(tab_text[:3])
     
 class PN_dbTaxa(PN_DatabaseConnect):
-    #a class to manage the database of taxa
+#a subClass to manage the database of taxa (taxonomy schema), inherit from PN_DatabaseConnect
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.rank_typology = None
         #self.db = None
 
-    # def open(self):
-    #     super().open("db_taxa")
+    def dict_rank_value(self, key, field = None):
+    #set the global dictionnary of rank typology if not exists and returns the dictionnary of a rank from its id_rank or rank_name
+        #create a query to copy the table taxonomy.taxa_rank in a dictionnary
+        if self.rank_typology is None:
+            sql_query = """
+                SELECT id_rank, rank_name, row_to_json(t) json_row 
+                FROM 
+                    (SELECT id_rank, rank_name, id_rankparent, suffix, prefix, childs
+                    FROM taxonomy.taxa_rank a,
+                    LATERAL 
+                        (SELECT
+                            to_json(array_agg(id_rank)) AS childs
+                        FROM
+                            taxonomy.pn_ranks_children(a.id_rank) b
+                        ) z
+                    ) t
+                ORDER BY 
+                    id_rank
+            """
+        #execute the query
+            query = self.db.exec(sql_query)
+            self.rank_typology = {}
+        #fill the dictionnary with a both entries: id_rank and rank_name as key
+            while query.next():
+                self.rank_typology[query.value("id_rank")] = json.loads(query.value("json_row"))
+                self.rank_typology[query.value("rank_name")] = json.loads(query.value("json_row"))
+        #return for the rank (key), the dictionnary and field value if field is not None
+        if key in self.rank_typology:
+            if field is None:
+                return self.rank_typology[key].copy()
+            else:
+                return self.rank_typology[key][field]
+        return None
+    
 
+
+        
+    def db_get_valid_merges (self, id_taxonref):
+        """return a dictionnary {"name": id_taxonref} of valid sibling for merging taxa based on the id_rank
+            #ex: return {'Acorales': 17056, 'Alismatales': 17057, 'Amborellales': 16183,...}
+            when searching for a order
+        """
+        sql_query = f"""
+                    SELECT
+                    n.taxaname,
+                    n.id_taxonref
+                    FROM taxonomy.taxa_names n
+                    JOIN taxonomy.taxa_reference r ON r.id_taxonref = {id_taxonref}
+                    WHERE
+                        (r.id_rank < 21 AND n.id_rank = r.id_rank)
+                        OR
+                        (r.id_rank >= 21 AND n.id_rank >= 21)
+                    ORDER BY n.taxaname;
+                    """
+        #execute the query
+        query = self.db.exec(sql_query)
+        taxa_dict = {}
+        while query.next():
+            taxa_dict[query.value(0)] = query.value(1)
+        return taxa_dict
+    
+    def db_get_valid_parents (self, id_taxonref):
+        """return a dictionnary {"name": id_taxonref} of valid parents for id_taxonref based on the id_rank
+            #ex: return {'Acorales': 17056, 'Alismatales': 17057, 'Amborellales': 16183,...}
+            when searching for a family
+        """
+        sql_query = f"""
+                SELECT
+                n.taxaname,
+                n.id_taxonref
+                FROM taxonomy.taxa_names n
+                JOIN taxonomy.taxa_reference r ON r.id_taxonref = {id_taxonref}
+                JOIN taxonomy.taxa_rank tr ON r.id_rank = tr.id_rank
+                WHERE
+                    n.id_rank >= tr.id_rankparent
+                AND n.id_rank < tr.id_rank
+                ORDER BY n.taxaname;
+                """
+        #execute the query
+        query = self.db.exec(sql_query)
+        taxa_dict = {}
+        while query.next():
+            taxa_dict[query.value(0)] = query.value(1)
+        return taxa_dict
+
+    def db_get_searchnames (self, ls_search_name):
+        """return a dictionnary {"name": id_taxonref} of names founded into the database from a list of names (ls_search_name)
+            #ex: return {"Amborella": 300, "Amborella trichopoda": 1802}
+            from a the list ['Amborella', 'Amborella trichopoda', 'Miconia foo']
+        """
+        sql_query = f"""
+                    SELECT 
+                        jsonb_object_agg(original_name, id_taxonref)
+                    FROM 
+                        taxonomy.pn_taxa_searchnames(ARRAY{ls_search_name})
+                    WHERE 
+                        id_taxonref IS NOT NULL;
+                    """
+        #execute the query
+        query = self.db.exec(sql_query)
+        if query.next():
+            result = query.value(0)
+            if result:
+                return json.loads(result)
+        return {}
+
+    
+    def db_get_names(self, id_taxonref):
+        """return a dictionnary of list of all the names linked to a id_taxonref and organized by categories
+            #ex: {'Autonyms': ['Amborella trichopoda Baill.', 'Amborella trichopoda'], 'Nomenclatural': ['Platyspermation crassifolium', 'Platyspermation crassifolium Guillaumin']}
+        """
+        sql_query = f"""
+                    SELECT 
+                        a.name,  a.category, a.id_category 
+                    FROM 
+                        taxonomy.pn_names_items({id_taxonref}) a 
+                    ORDER BY 
+                        a.id_category, a.name
+                    """
+        #execute the query
+        query = self.db.exec(sql_query)
+        dict_db_names = {'Autonyms': []} #to ensure the first row
+        while query.next():
+            #groups any name by category
+            if query.value("id_category") < 5:
+                _category = 'Autonyms'
+            else:
+                _category = query.value("category")
+            #add category to the final result if not exists
+            if _category not in dict_db_names:
+                dict_db_names[_category] = []
+            dict_db_names[_category].append(query.value("name"))
+        return dict_db_names
+    
     def db_get_apg4_clades (self):
         #return the list of distinct clades from the apg4 table (field clade), [] if nothing
         #typically ['ANA Grade', 'Ceratophyllales', 'Chloranthales', 'Core Eudicots', 'Magnoliids', 'Monocots']
@@ -312,16 +494,13 @@ class PN_dbTaxa(PN_DatabaseConnect):
         sql_query = """
                     SELECT json_agg(DISTINCT clade) AS json_list 
                     FROM
-                    (
-                        SELECT clade_apg AS clade FROM taxonomy.taxa_group
+                        (SELECT clade_apg AS clade FROM taxonomy.taxa_group
                             UNION ALL
-                        SELECT group_taxa AS clade FROM taxonomy.taxa_group
-                    )
-                    WHERE clade IS NOT NULL
-                    ;
+                         SELECT group_taxa AS clade FROM taxonomy.taxa_group
+                        )
+                    WHERE clade IS NOT NULL;
                     """
-        #sql_query = "SELECT json_agg(DISTINCT a.group_taxa ||'-'|| a.clade_apg) AS json_list FROM taxonomy.wfo_order a;"
-
+        #execute the query
         query = self.db.exec(sql_query)
         if query.next():
             result = query.value("json_list")
@@ -433,7 +612,7 @@ class PN_dbTaxa(PN_DatabaseConnect):
                     )
             SELECT json_agg(row_to_json(score_taxa)) FROM score_taxa;
         """
-        #print(sql_query)
+        #execute the query
         result = self.db.exec (sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
@@ -443,14 +622,92 @@ class PN_dbTaxa(PN_DatabaseConnect):
             json_text = result.value(0)
             if json_text:
                 return json.loads(json_text)
-        #print (sql_query)
         return []
-
-
     
+#############################
+    def db_get_taxon(self, id_taxonref):
+        """return a json with basic taxa fields from id_taxonref in taxa_reference"""
+        sql_query = f"""
+                    SELECT 
+                        taxaname, authors, id_rank, published, accepted, id_parent 
+                    FROM
+                        taxonomy.taxa_names
+                    WHERE
+                        id_taxonref = {id_taxonref}
+                   """
+        #execute the query
+        query = self.db.exec(sql_query)
+        if query.next():
+            return {
+                "id_taxonref": id_taxonref,
+                "id_parent": query.value("id_parent"),
+                "id_rank": query.value("id_rank"),
+                "taxaname": query.value("taxaname"),
+                "authors": query.value("authors"),
+                "published": query.value("published"),
+                "accepted": query.value("accepted")
+            }
+
+#############################
+    def db_get_list_hierarchy(self, id_taxonref, id_rank = None):
+        """return a json with hierarchy from Plantae to Childs of a id_taxonref"""
+        # Get the hierarchy for the selected taxa
+        try:
+            if id_taxonref * id_rank == 0:
+                return
+        except Exception:
+            return
+        str_idtaxonref = str(id_taxonref)
+        #sql_where = ''
+        # extend to all taxa included in the genus when id_rank > genus (e.g. for species return all sibling species within the genus)
+        #or in other words, set to the genus rank when id_rank > genus
+        if id_rank > 14: #get the genus rank at minimum
+            str_idtaxonref = f"""(SELECT * FROM taxonomy.pn_taxa_getparent({str_idtaxonref},14))"""
+
+        # sql_where = ''
+        # create the SQL query to get the hierarchy of taxa
+        sql_query = f"""SELECT 
+                            b.id_taxonref, id_rank, id_parent, taxaname,  authors, published, accepted
+                            FROM
+                                (SELECT 
+                                    id_taxonref
+                                FROM    
+                                    taxonomy.pn_taxa_parents({str_idtaxonref}, True)
+                                UNION 
+                                SELECT 
+                                    id_taxonref
+                                FROM 
+                                    taxonomy.pn_taxa_childs({str_idtaxonref}, False)
+                                ) a
+                            INNER JOIN 
+                                taxonomy.taxa_names b 
+                            ON 
+                                a.id_taxonref = b.id_taxonref
+                        ORDER BY 
+                            id_rank, taxaname;
+                    """
+        # execute the Query and fill the list_hierarchy of dictionnary
+        query = self.db.exec(sql_query)
+        #set the taxon to the hierarchical model rank = taxon
+        ls_hierarchy = []
+        while query.next():
+            ls_hierarchy.append({
+                "id_taxonref": query.value('id_taxonref'), 
+                "id_parent": query.value('id_parent'), 
+                "id_rank" : query.value('id_rank'), 
+                "taxaname": query.value('taxaname').strip(), 
+                "authors": query.value('authors').strip(), 
+                "published": query.value('published'), 
+                "accepted": query.value('accepted')
+                }
+            )
+        return ls_hierarchy
+
+#############################    
     def db_add_synonym(self, id_taxonref, synonym, category = 'Orthographic', error_msg = False):
         #add a synonym to a id_taxonref, return True or False if error
         sql_query = f"SELECT taxonomy.pn_names_add ({id_taxonref}, '{synonym}', '{category}')"
+        #execute the query
         result = self.db.exec(sql_query)
         if result.lastError().isValid() and error_msg:
             msg = self.postgres_error(result.lastError())
@@ -461,6 +718,7 @@ class PN_dbTaxa(PN_DatabaseConnect):
     def db_edit_synonym(self, old_synonym, new_synonym, new_category = 'Orthographic'):
         #edit a synonym return True or False if error
         sql_query = f"SELECT taxonomy.pn_names_update ('{old_synonym}','{new_synonym}', '{new_category}')"
+        #execute the query
         result = self.db.exec(sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
@@ -472,6 +730,7 @@ class PN_dbTaxa(PN_DatabaseConnect):
         #delete a synonym from the taxonomy.taxa_names table, return True or False if error
         #sql_query = self.sql_taxa_delete_synonym(synonym)
         sql_query = f"SELECT taxonomy.pn_names_delete ('{synonym}')"
+        #execute the query
         result = self.db.exec(sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
@@ -479,31 +738,151 @@ class PN_dbTaxa(PN_DatabaseConnect):
             return False
         return True
     
+    def field_dbase(self, fieldname, id_taxonref):
+        """get a field value from the taxonomy.taxa_reference according to a id_taxonref"""
+        sql_query = f"""
+                    SELECT 
+                        {fieldname} 
+                    FROM
+                        taxonomy.taxa_reference
+                    WHERE
+                        id_taxonref = {id_taxonref}
+                   """
+        #execute the query
+        query = self.db.exec(sql_query)
+        query.next()
+        return query.value(fieldname)
+    
+    def db_get_properties (self, id_taxonref):
+        """     
+        Return a json (dictionnary of sub-dictionnaries of taxa properties taxa identity + field properties (jsonb)
+        from a PNTaxa class
+        """
+        dict_db_properties = {}
+        #create a copy of dict_properties with empty values
+        for _key, _value in functions.list_db_properties.copy().items():
+            dict_db_properties[_key] = {}.fromkeys(_value,'')
+        #fill the properties from the json field properties annexed to the taxa        
+        try:
+            json_props = self.field_dbase("properties", id_taxonref)
+            json_props = json.loads(json_props)
+            for _key, _value in dict_db_properties.items():
+                try:
+                    tab_inbase = json_props[_key]
+                    if tab_inbase is not None:
+                        for _key2, _value2 in tab_inbase.items():
+                            _value2 = functions.get_str_value(_value2)
+                            if _value2:
+                                _value[_key2] = _value2.title()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return dict_db_properties
+
+    def db_get_properties_count (self, id_taxonref):
+        #load all the similar names of the taxa to a json dictionnary
+        sql_query = f"""
+            WITH childs_taxaname AS 
+                (
+                    SELECT b.id_taxonref, b.properties 
+                    FROM 
+                    taxonomy.pn_taxa_childs({id_taxonref}) a
+                    INNER JOIN taxonomy.taxa_reference b ON a.id_taxonref = b.id_taxonref
+                    WHERE b.id_rank >=21
+                    AND b.properties IS NOT NULL 
+                )
+                SELECT jsonb_object_agg(key, fields) AS json_result
+                FROM (
+                    SELECT key, jsonb_object_agg(field, values_json) AS fields
+                    FROM (
+                        SELECT key, field, jsonb_object_agg(
+                            replace(value::TEXT, chr(34), '')::TEXT, 
+                            occurrence_count
+                        ) AS values_json
+                        FROM (
+                            SELECT 
+                                main.key AS key, 
+                                sub.key AS field, 
+                                sub.value::TEXT AS value, 
+                                COUNT(*) AS occurrence_count
+                            FROM childs_taxaname,
+                            LATERAL jsonb_each(properties) AS main,
+                            LATERAL jsonb_each(main.value) AS sub
+                            GROUP BY main.key, sub.key, sub.value
+                        ) grouped_data
+                        GROUP BY key, field
+                    ) fields_grouped
+                    GROUP BY key
+                ) final_json;
+                    """
+        #execute the query
+        query = self.db.exec(sql_query)
+        query.next()
+        json_props = query.value("json_result")
+        if json_props:
+            json_props = json.loads(json_props)
+        else:
+            json_props = None
+        return json_props
+
+
     def db_update_properties (self, id_taxonref, json_properties):
         #update the properties json of a taxonref from a json string, return True or False if error
         if json_properties is None:
             json_properties = 'NULL'
         else:
+            json_properties = json_properties.replace("'", "''")  # escape single quotes
             json_properties = f"'{json_properties}'::jsonb"
         sql_query = f"""UPDATE taxonomy.taxa_reference 
-                    SET properties = {json_properties}
-                    WHERE id_taxonref = {id_taxonref} AND id_rank >= 21;"""
+                        SET properties = {json_properties}
+                        WHERE id_taxonref = {id_taxonref} 
+                        AND id_rank >= 21;
+                    """
+        #execute the query
         result = self.db.exec(sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
             QtWidgets.QMessageBox.critical(None, "Database error", msg, QtWidgets.QMessageBox.Ok)
             return False
         return True
-               
+    
+    def db_get_metadata (self, id_taxonref):
+        #load metadata json from database
+        json_data = self.field_dbase("metadata", id_taxonref)
+        if not json_data:
+            return None
+        json_data = json.loads(json_data)
+        #sorted the result, assure to set web links and query time ending the dict
+        for key, metadata in json_data.items():
+            _links = {'url':None, 'webpage':None} #, 'query time': None}
+            if key.lower() =="score":
+                _links = {}
+            _fields = {}
+            for _key, _value in metadata.items():
+                if _key.lower() in _links:
+                    _links[_key] = _value
+                else:
+                    _fields[_key] = _value
+            #add the links to the fields
+            #_fields = _fields | _links
+            for _key, _value in _links.items():
+                 if _value:
+                    _fields[_key] = _value
+            json_data[key] = _fields
+        return json_data
+
     def db_update_metadata (self, id_taxonref, json_metadata):
         #return sql statement to update the metadata json of a taxonref
         if json_metadata is None:
             json_metadata = 'NULL'
         else:
+            json_metadata = json_metadata.replace("'", "''")  # escape single quotes
             json_metadata = f"'{json_metadata}'::jsonb"
         sql_query = f"""UPDATE taxonomy.taxa_reference 
-                    SET metadata = {json_metadata}
-                    WHERE id_taxonref = {id_taxonref};"""
+                        SET metadata = {json_metadata}
+                        WHERE id_taxonref = {id_taxonref};
+                    """
         result = self.db.exec(sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
@@ -516,6 +895,7 @@ class PN_dbTaxa(PN_DatabaseConnect):
         if to_idtaxonref == from_idtaxonref:
             return False
         sql_query = f"CALL taxonomy.pn_taxa_set_synonymy({from_idtaxonref}, {to_idtaxonref}, '{category}');"
+        #execute the query
         result = self.db.exec(sql_query)
         if result.lastError().isValid():
             msg = self.postgres_error(result.lastError())
@@ -545,7 +925,7 @@ class PN_dbTaxa(PN_DatabaseConnect):
                 return []
         return ls_todelete
     
-    def db_save_dict_taxa(self, dict_tosave): #database_save_taxon(dict_tosave):
+    def db_save_dict_taxa(self, dict_tosave):
         #save a taxa dictionnary in the database, return id_taxonref (new or updated) or None if error
         #dict_tosave = {"id_taxonref":integer, "id_parent":integer, "id_rank" :integer, "basename":text, "authors":text, "parentname":text[None], "published":boolean, "accepted":boolean}
         code_error = ''
@@ -608,350 +988,3 @@ class PN_dbTaxa(PN_DatabaseConnect):
         return return_idtaxonref
     
 
-    # def sql_taxa_searchNames(self, text_search):
-    #     text_search = re.sub(r'[\*\%]', '', text_search)
-    #     #return a sql statement for searching taxanames
-    #     return f"SELECT id_taxonref FROM taxonomy.pn_taxa_searchname ('%{text_search}%')"
-
-
-
-    # def sql_apg4_clade_json (self):
-    #     #return sql statement to get the list of distinct clades from the apg4 table
-    #     return "SELECT json_agg(DISTINCT a.clade) AS json_list FROM taxonomy.apg4 a WHERE clade IS NOT NULL;"   
-
-
-    
-    # def sql_taxa_add_synonym(self, id_taxonref, synonym, category = 'Orthographic'):
-    #     #return a sql statement for adding a synonym
-    #     return f"SELECT taxonomy.pn_names_add ({id_taxonref}, '{synonym}', '{category}')"
-    
-    # def sql_update_metadata_json (self, id_taxonref, json_metadata):
-    #     #return sql statement to update the metadata json of a taxonref
-    #     return f"""UPDATE taxonomy.taxa_reference 
-    #                 SET metadata = '{json_metadata}'::jsonb
-    #                 WHERE id_taxonref = {id_taxonref};"""
-    # def sql_taxa_delete_synonym(self, synonym):
-    #     #return a sql statement for deleting a synonym
-    #     return f"SELECT taxonomy.pn_names_delete ('{synonym}')"
-    
-    # def sql_taxa_get_childs(self, id_taxonref, include_self=True):
-    #     #return a sql statement for getting the id_taxonref childs of a taxonref
-    #     return f"SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({id_taxonref}, {include_self})"
-    # def sql_taxa_delete_reference(self, id_taxonref):
-    #     #return a sql statement for deleting a reference name
-    #     return f"SELECT taxonomy.pn_taxa_delete ({id_taxonref}) AS id_taxonref"
-#class to display a search widget composed of a search text and and treeview result with  matched taxa and score
-class PN_TaxaSearch(QtWidgets.QWidget):
-    """
-    The PN_TaxaSearch class is a custom class that inherits from QtWidgets.QWidget.
-    It is designed to display a search widget composed of a search text and a treeview result with matched taxa and score.
-
-    Attributes:
-        lineEdit_search_taxa (QtWidgets.QLineEdit): The search text input field.
-        treeview_scoretaxa (QtWidgets.QTreeView): The treeview widget that displays the search results.
-
-    Methods:
-        __init__ : Initializes the search widget.
-        setText : Sets the text of the search input field.
-        selectedTaxa : Returns the selected taxon object.
-        selectedTaxonRef : Returns the reference of the selected taxon.
-        selectedScore : Returns the score of the selected taxon.
-        selectedTaxaId : Returns the ID of the selected taxon.
-
-    Signals:
-        selectionChanged (str): Emitted when the selection in the treeview changes.
-        doubleClicked (object): Emitted when an item in the treeview is double-clicked.
-
-    """
-    selectionChanged = pyqtSignal(str)
-    doubleClicked = pyqtSignal(object)
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # load the GUI
-        self.lineEdit_search_taxa = QtWidgets.QLineEdit(self)
-        self.treeview_scoretaxa = QtWidgets.QTreeView(self)
-        self.lineEdit_search_taxa.setPlaceholderText("search taxa")
-        self.treeview_scoretaxa.setEditTriggers(QtWidgets.QTreeView.NoEditTriggers)
-        #set the model
-        self.model = QtGui.QStandardItemModel()
-        self.model.setColumnCount(2)
-        self.treeview_scoretaxa.setModel(self.model)
-        self.treeview_scoretaxa.setHeaderHidden(True)
-        #connect slots
-        self.treeview_scoretaxa.selectionModel().selectionChanged.connect(self.on_selection_changed)
-        self.treeview_scoretaxa.doubleClicked.connect(self.on_doubleClicked)
-        self.lineEdit_search_taxa.textChanged.connect(self.on_text_changed)
-        # set the layout
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.lineEdit_search_taxa)
-        layout.addWidget(self.treeview_scoretaxa)
-        self.setLayout(layout)
-    
-    def setText(self, newtext):
-        self.lineEdit_search_taxa.setText(newtext)
-
-    def currentIndex(self):
-        return self.treeview_scoretaxa.currentIndex()
-    
-    def selectedTaxa(self):
-        return self.treeview_scoretaxa.currentIndex().siblingAtColumn(0).data()
-    
-    def selectedTaxonRef(self):
-        parent = self.treeview_scoretaxa.currentIndex().parent()
-        if parent.isValid():
-            return parent.data()
-        else:
-            return self.treeview_scoretaxa.currentIndex().data()
-        
-    def selectedTaxaId(self):
-        parent = self.treeview_scoretaxa.currentIndex().parent()
-        if parent.isValid():
-            return parent.data(Qt.UserRole)
-        else:
-            return self.treeview_scoretaxa.currentIndex().data(Qt.UserRole)
-    
-    def selectedScore(self):
-        return self.treeview_scoretaxa.currentIndex().siblingAtColumn(1).data()
-    
-    def on_selection_changed(self, selected):
-        index = selected.indexes()[0] if selected.indexes() else None
-        if index:
-            selected_item = index.data()
-            self.selectionChanged.emit(selected_item)  # Emit the slot selected_item
-            
-    def on_doubleClicked(self, index):
-        self.doubleClicked.emit(index)  # Emit the slot selected_item
-
-    def on_text_changed(self):
-        #"main" function to search for taxa resolution
-        self.model.clear()
-        search_txt = self.lineEdit_search_taxa.text()
-        _score = 0.4
-        #exlude search according to number of characters
-        if len(search_txt) < 4:
-            return
-        if len(search_txt) < 8:
-            _score = 0.2
-        #create sql query
-        sql_query = f"""
-            SELECT 
-                a.taxonref, a.score, a.id_taxonref, c.name AS synonym
-            FROM 
-                taxonomy.pn_taxa_searchname('{search_txt}', {_score}::numeric) a 
-            INNER JOIN 
-                taxonomy.taxa_nameset c 
-            ON 
-                a.id_taxonref = c.id_taxonref AND c.category <> 1
-            ORDER 
-                BY score DESC, synonym ASC
-        """
-        #print (sql_query)
-        query = QtSql.QSqlQuery (sql_query)
-        dict_nodes = {}
-        tab_header = ['taxonref', 'score']
-        while query.next():
-            id_taxonref = query.value('id_taxonref')
-            if id_taxonref in dict_nodes:
-                ref_item = dict_nodes[id_taxonref]
-            else:
-                #create the node if not already existed
-                ref_item = [QtGui.QStandardItem(str(query.value(x))) for x in tab_header]
-                ref_item[0].setData(id_taxonref, Qt.UserRole)
-                ref_item[1].setTextAlignment(Qt.AlignCenter)
-                self.model.appendRow(ref_item)
-                dict_nodes[id_taxonref] = ref_item
-                #set score in red if below 50
-                if query.value('score') < 50:
-                    _color =  QtGui.QColor(255, 0, 0)
-                    ref_item[1].setData(QtGui.QBrush(_color), Qt.ForegroundRole)
-            if query.value('synonym'):
-                ref_item[0].appendRow ([QtGui.QStandardItem(query.value('synonym'))])
-                
-        if self.model.rowCount() > 0:
-            self.treeview_scoretaxa.resizeColumnToContents(1)
-            self.treeview_scoretaxa.setExpanded(self.model.index(0, 0), True)
-            self.treeview_scoretaxa.header().setStretchLastSection(False)
-            self.treeview_scoretaxa.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-            self.treeview_scoretaxa.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-
-
-#class to display a treeview with hiercharchical taxonomy
-# class PN_TaxaQTreeView(QtWidgets.QTreeView):
-#     """
-#     The PN_TaxaQTreeView class is a custom class that inherits from QtWidgets.QTreeView.
-#     It is designed to display a hierarchical taxonomic structure.
-#     The class takes a PNTaxa object as input to define the taxonomic hierarchy.
-
-#     Attributes:
-#         None
-
-#     Methods:
-#         __init__ : Initializes the tree view window, disabling editing capabilities.
-#         setdata : Defines the taxonomic hierarchy based on a PNTaxa object. It creates a SQL query to retrieve the hierarchy, executes the query, and populates the tree view with the results.
-#         selecteditem : Returns a PNTaxa object corresponding to the selected item in the tree view.
-
-#     Notes:
-#         The setdata method is the primary method of the class, as it retrieves and populates the taxonomic hierarchy from a PNTaxa object.
-#         The selecteditem method is a convenience function to retrieve the data of the selected item as a PNTaxa object.
-#     """
-#     def __init__(self):
-#         super().__init__()
-#         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-    
-    
-#     def setdata(self, myPNTaxa):
-# # Get the hierarchy for the selected taxa
-#         model = QtGui.QStandardItemModel()
-#         #model.setHorizontalHeaderLabels(['Rank', 'Taxon'])
-#         self.setModel(model)
-#         self.setColumnWidth(0, 300)
-#         ls_hierarchy = myPNTaxa.list_hierarchy
-#         if not ls_hierarchy:
-#             return
-
-#         dict_idtaxonref = {}
-#         for item in ls_hierarchy:
-#             dict_idtaxonref[item.idtaxonref] = [QtGui.QStandardItem(item.rank_name), QtGui.QStandardItem(item.taxonref)]
-
-#         for item in ls_hierarchy:
-#             #search for a parent_item in the dictionnary of item index on id_taxonref
-#             item_parent = dict_idtaxonref.get(item.id_parent, None)
-#             item_taxon = dict_idtaxonref.get(item.idtaxonref, None)
-#             #append as child or root
-#             if item_parent:
-#                 item_parent[0].appendRow(item_taxon)
-#             else:
-#                 # append as a new line if item not found (or first item)
-#                 model.appendRow(item_taxon)
-#             #if item_rank:
-#             item_taxon[0].setData(item, Qt.UserRole)
-#             # set italic if not published
-#             if not item.published:
-#                 font = QtGui.QFont()
-#                 font.setItalic(True)
-#                 model.setData(item_taxon[0].index(), font, Qt.FontRole)
-
-#         # set bold the current id_taxonref line (2 first cells) and italized authors if not published
-#         current_item = dict_idtaxonref.get(myPNTaxa.idtaxonref, None)
-#         if current_item:
-#             font = QtGui.QFont()
-#             font.setBold(True)
-#             key_index = current_item[0].index() #save key_index if found
-#             model.setData(current_item[0].index(), font, Qt.FontRole)
-#             model.setData(current_item[0].index(), font, Qt.FontRole)
-
-#         if key_index:
-#             #select and ensure visible the key_index (automatic scroll)
-#             self.selectionModel().setCurrentIndex(key_index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
-#             self.scrollTo(key_index,QtWidgets.QAbstractItemView.PositionAtCenter)  # PositionAtTop/EnsureVisible
-            
-#         self.setHeaderHidden(True)
-#         self.expandAll()
-
-#     def selecteditem(self):
-#         #return a PNTaxa for the selected item into the hierarchical model
-#         return self.currentIndex().siblingAtColumn(0).data(Qt.UserRole)
-
-
-
-#     def setdata2(self, myPNTaxa):
-# # Get the hierarchy for the selected taxa
-#         model = QtGui.QStandardItemModel()
-#         model.setHorizontalHeaderLabels(['Rank', 'Taxon'])
-#         self.setModel(model)
-#         self.setColumnWidth(0, 300)
-#         try:
-#             if myPNTaxa.idtaxonref * myPNTaxa.id_rank == 0:
-#                 return
-#         except Exception:
-#             return
-#         str_idtaxonref = str(myPNTaxa.idtaxonref)
-#         sql_where = ''
-#         # extend to all taxa included in the genus when id_rank > genus (e.g. for species return all sibling species within the genus)
-#         #or in other words, set to the genus rank when id_rank > genus
-#         if myPNTaxa.id_rank > 14: #get the genus rank at minimum
-#             str_idtaxonref = f"""(SELECT * FROM taxonomy.pn_taxa_getparent({str_idtaxonref},14))"""
-#         if myPNTaxa.id_rank < 10: #limit the deepth to the families level
-#             sql_where = "\nWHERE a.id_rank <=10"
-#         # create the SQL query to get the hierarchy of taxa
-#         sql_query = f"""SELECT 
-#                             id_taxonref, id_rank, id_parent, taxaname,  coalesce(authors,'')::text authors, published, accepted 
-#                         FROM
-#                             (SELECT 
-#                                 id_taxonref, id_rank, id_parent, taxaname,  authors, published, accepted
-#                             FROM    
-#                                 taxonomy.pn_taxa_parents({str_idtaxonref}, True)
-#                             UNION 
-#                             SELECT 
-#                                 id_taxonref, id_rank, id_parent, taxaname,  authors, published, accepted
-#                             FROM 
-#                                 taxonomy.pn_taxa_childs({str_idtaxonref}, False)
-#                             ) a
-#                             {sql_where}
-#                         ORDER BY 
-#                             a.id_rank, a.taxaname
-#                     """
-#         #print (sql_query)
-#         model = self.model()
-#         # model.setRowCount(0)
-#         model.setColumnCount(2)
-#         # execute the Query and fill the treeview standarditemmodel based on search id_parent into the third column containing id_taxonref
-#         query = QtSql.QSqlQuery(sql_query)
-#         #set the taxon to the hierarchical model rank = taxon
-#         key_index = None
-#         dict_idtaxonref = {}
-#         while query.next():
-#             id_taxonref = query.value('id_taxonref')
-#             idrank = query.value('id_rank')
-#             taxaname = query.value('taxaname').strip()
-#             authors = query.value('authors').strip()
-#             published = query.value('published')
-#             accepted = query.value('accepted')
-#             dict_item = {'idtaxonref': id_taxonref, 'taxaname': taxaname, 'authors': authors, 'published': published, 'accepted': accepted, 'idrank': idrank, 'parent': ''}
-#             #create the items
-#             _rankname = functions.get_dict_rank_value(idrank,'rank_name')
-#             ##set the authors and composite taxonref
-#             if len(authors) > 0 and not published:
-#                 authors = authors + ' ined.' 
-#             _taxonref = taxaname + ' ' + authors
-#             _taxonref = _taxonref.strip()
-#             #create the QStandardItem for the taxon
-#             item = QtGui.QStandardItem(_rankname)
-#             item1 = QtGui.QStandardItem(_taxonref)
-
-#             #search for a parent_item in the dictionnary of item index on id_taxonref
-#             item_parent = dict_idtaxonref.get(query.value('id_parent'), None)
-#             if item_parent:
-#                 # get the first col of the QStandardItem
-#                 index = item_parent.index()
-#                 dict_item["parent"] = index.data(Qt.UserRole).get('taxaname', '')
-#                 # append a child to the item
-#                 model.itemFromIndex(index).appendRow([item, item1],)
-#             else:
-#                 # append as a new line if item not found (or first item)
-#                 model.appendRow([item, item1],)
-#             if item:
-#                 item.setData(dict_item, Qt.UserRole)
-#                 dict_idtaxonref[id_taxonref] = item
-            
-#             # set bold the current id_taxonref line (2 first cells) and italized authors if not published
-#             if not published:
-#                 font = QtGui.QFont()
-#                 font.setItalic(True)
-#                 model.setData(item1.index(), font, Qt.FontRole)
-#             if id_taxonref == myPNTaxa.idtaxonref:
-#                 font = QtGui.QFont()
-#                 font.setBold(True)
-#                 key_index = item.index() #save key_index if found
-#                 model.setData(item.index(), font, Qt.FontRole)
-#                 model.setData(item1.index(), font, Qt.FontRole)
-#         if key_index:
-#             #select and ensure visible the key_index (automatic scroll)
-#             self.selectionModel().setCurrentIndex(key_index, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
-#             self.scrollTo(key_index,QtWidgets.QAbstractItemView.PositionAtCenter)  # PositionAtTop/EnsureVisible
-
-#         self.setHeaderHidden(True)
-
-#         #self.resizeColumnToContents()
-#         self.hideColumn(2)
-#         self.expandAll()

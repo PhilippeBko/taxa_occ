@@ -1341,14 +1341,14 @@ class MainWindow(QtWidgets.QMainWindow):
             new_synonym = selecteditem.synonym
             new_category = 'Orthographic'
             taxa_name = self.suggested_name_taxon_ref
-            sql_query = f"SELECT taxonomy.pn_names_add ('{new_idtaxonref}, {new_synonym}','{new_category}')"
+            sql_query = f"SELECT taxonomy.pn_names_add ({new_idtaxonref}, '{new_synonym}','{new_category}')"
             result = QtSql.QSqlQuery (sql_query)
             if len(result.lastError().nativeErrorCode ()) == 0:
                 selecteditem.id_taxonref = new_idtaxonref
                 selecteditem.taxon_ref = taxa_name
             else:
                 msg = postgres_error(result.lastError())
-                QtWidgets.QtWidgets.QMessageBox.critical(self.ui_addname, "Database error", msg, QtWidgets.QtWidgets.QMessageBox.Ok)
+                QtWidgets.QMessageBox.critical(self.window, "Database error", msg, QtWidgets.QMessageBox.Ok)
         else:
             class_newname = PNSynonym_edit (selecteditem)
             class_newname.show()

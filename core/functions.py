@@ -1,7 +1,41 @@
+import os
+import sys
+
 import re
-import json
-from PyQt5 import  QtSql
 from datetime import datetime
+
+#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
+#sys.path.insert(0, BASE_DIR)
+
+def resource_path(*paths):
+    return os.path.join(BASE_DIR, *paths)
+
+
+# functions.py
+
+class AppContext:
+    def __init__(self, PN_database):
+        self.dbtaxa = PN_database
+
+
+_context = None
+
+def init_context(context: AppContext):
+    global _context
+    if _context is not None:
+        raise RuntimeError("Context already initialized")
+    _context = context
+
+def dbase() -> AppContext:
+    if _context is None:
+        raise RuntimeError("Context not initialized")
+    return _context.dbtaxa
+
+
+
+
+
 #synonyms for database value
 dict_strata = {
     "understorey": [1, "sous-bois", "sotobosque", "understory"], 
@@ -23,7 +57,7 @@ dict_month = {
     11: ["november", "noviembre", "novembre", "nov."], 
     12: ["december", "diciembre", "décembre", "déc.", "dec.", "dic."]
 }
-RANK_TYPOLOGY = {}
+
 """ list_db_type_translate = {1:'boolean', 2:'integer', 3:'integer', 4:'integer', 5:'integer', 6:'numeric', 7: 'text', 10:'text', 14: 'date', 15:'date', 16:'date',
                           'bigint': 'integer', 'character varying': 'text','double precision' : 'numeric', 'real': 'numeric', 'smallint' : 'integer', 
                           'int64': 'integer', 'bool': 'boolean', 'float64': 'numeric'}
@@ -169,344 +203,157 @@ def get_str_value (value):
         return value
     else:
         return ''
-    
-def get_dict_rank_value(key, field = None):
-    #return data from ranks
-    # if empty, load the table as a Json with id_rank and rank_name as main keys
-    if len (RANK_TYPOLOGY) == 0:
-        sql_query = "SELECT id_rank, rank_name, row_to_json(t) json_row FROM (SELECT id_rank, rank_name, id_rankparent, suffix, prefix FROM taxonomy.taxa_rank ORDER BY id_rank) t"
-        sql_query = """
-            SELECT id_rank, rank_name, row_to_json(t) json_row 
-            FROM 
-                (SELECT id_rank, rank_name, id_rankparent, suffix, prefix, childs
-                FROM taxonomy.taxa_rank a,
-                LATERAL 
-                    (SELECT 
-                        to_json(array_agg(id_rank)) AS childs
-                    FROM 
-                        taxonomy.pn_ranks_children(a.id_rank) b
-                    ) z
-                ) t
-            ORDER BY 
-                id_rank
-"""
-        query = QtSql.QSqlQuery(sql_query)
-        while query.next():
-            RANK_TYPOLOGY[query.value("id_rank")] = json.loads(query.value("json_row"))
-            RANK_TYPOLOGY[query.value("rank_name")] = json.loads(query.value("json_row"))
-    #return the dict_rank from key or field is not None
-    if key in RANK_TYPOLOGY:
-        if field is None:
-            return RANK_TYPOLOGY[key].copy()
-        else:
-            return RANK_TYPOLOGY[key][field]
 
-def get_dict_from_species(_taxa):
-    #return a taxa dictionnary of properties from a _taxa string
-    #decompose a taxaname (from species to hybrid)
-    if len(_taxa) <= 0 : 
-        return
-    tab_result = {}
-    tab_result["original_name"] = _taxa   
-    index = -1
-    #standardize ssp, var and subsp
-    _taxa = re.sub(r'\s+ssp\.?\s+',' subsp. ', _taxa)
-    _taxa = re.sub(r'\s+subsp\s+',' subsp. ', _taxa)
-    _taxa = re.sub(r'\s+var\s+',' var. ', _taxa)
-    _taxa = re.sub(r'\s+forma\.?\s+',' f. ', _taxa)
-    _taxa = _taxa.strip()
 
-    #split the resulting name, and exit if only one word
-    tab_taxon = []
-    tab_taxon = _taxa.split()
-    if len(tab_taxon) < 2: 
-        return
 
-    #by default consider a species binomial name = 'genus + epithet'    
-    tab_result["name"] =''
-    tab_result['genus'] = tab_taxon[0].title()
-    tab_result['species'] = tab_taxon[1].strip()
-    tab_result["name"] = ' '.join([tab_result['genus'],tab_result['species']])
-    tab_result['prefix'] =''
-    tab_result['infraspecies']=''
-    tab_result['rank'] = ''
-    tab_result['basename'] = ''
-    tab_result['authors'] = ''
-    tab_result["names"] = ''
-    
-    # #base name contain at least one upper case, probably the author name of a upper taxa than species (genus, family,...) -->return
-    check_bn = re.sub(r'([A-Z])','',tab_result['species'])
-    if check_bn != tab_result['species']:
-       return
+def get_dict_from_species(taxa: str):
+    """
+    Parse a botanical taxon name (species → infraspecies → hybrid)
+    Returns a dict or None if the name is not a valid species-level taxon.
+    """
 
-    #check for infraspecific
-    if 'subsp.' in tab_taxon:
-        tab_result['prefix'] ='subsp.'
-        index = tab_taxon.index('subsp.')
-        tab_result['rank'] = 'Subspecies'
-    elif 'var.' in tab_taxon:
-        tab_result['prefix'] ='var.'
-        index = tab_taxon.index('var.')
-        tab_result['rank'] = 'Variety'
-    elif ' f. ' in _taxa:
-        tab_result['prefix'] ='f.'
-        index = tab_taxon.index('f.')
-        tab_result['rank'] = 'Forma'
-    elif 'x' in tab_taxon:
-        index = tab_taxon.index('x')
-        tab_result['rank'] = 'Hybrid'
-    elif chr(215) in tab_taxon: #some api server use this character instead of 'x'
-        index = tab_taxon.index(chr(215))
-        tab_result['rank'] = 'Hybrid'
+    if not taxa or not taxa.strip():
+        return None
+
+    result = {
+        'original_name': taxa,
+        'genus': '',
+        'species': '',
+        'infraspecies': '',
+        'rank': '',
+        'prefix': '',
+        'basename': '',
+        'authors': '',
+        'autonym': False,
+        'name': '',
+        'names': []
+    }
+
+    # --------------------------------------------------
+    # 1. Normalisation
+    # --------------------------------------------------
+    norm_rules = {
+        r'\bssp\.?\b': 'subsp.',
+        r'\bsubsp\b': 'subsp.',
+        r'\bvar\b': 'var.',
+        r'\bforma\.?\b': 'f.',
+    }
+
+    for pat, rep in norm_rules.items():
+        taxa = re.sub(pat, rep, taxa, flags=re.I)
+
+    taxa = ' '.join(taxa.split())
+    tokens = taxa.split()
+    result['basename'] = tokens[0].lower()
+    if len(tokens) < 2:
+        return None
+
+    # --------------------------------------------------
+    # 2. Genus + species (hard requirement)
+    # --------------------------------------------------
+    result['rank'] = 'Species'
+    genus, species = tokens[0], tokens[1]
+
+    # Reject higher taxa or malformed epithets
+    if re.search(r'[A-Z]', species):
+        return None
+
+    result['genus'] = genus.title()
+    result['species'] = species.lower()
+    result['basename'] = result['species']
+    result['name'] = f"{result['genus']} {result['species']}"
+
+    # --------------------------------------------------
+    # 3. Rank detection
+    # --------------------------------------------------
+    rank_tokens = {
+        'subsp.': 'Subspecies',
+        'var.': 'Variety',
+        'f.': 'Forma'
+    }
+
+    rank_index = None
+
+    # Hybrid (x or ×) takes priority
+    if 'x' in tokens[1:] or chr(215) in tokens:
+        result['rank'] = 'Hybrid'
+        result['prefix'] = 'x'
+        try:
+            x_index = tokens.index('x')
+        except ValueError:
+            x_index = tokens.index(chr(215))
+
+        if x_index + 1 >= len(tokens):
+            return None
+
+        result['species'] = tokens[x_index + 1].lower()
+        result['basename'] = result['species']
+        result['name'] = f"{result['genus']} x {result['species']}"
+        authors_start = x_index + 2
+
     else:
-        tab_result['rank'] = 'Species'
+        authors_start = 2
+        for t, r in rank_tokens.items():
+            if t in tokens:
+                rank_index = tokens.index(t)
+                result['rank'] = r
+                result['prefix'] = t
+                break
 
-    #get authors and basename considering autonyms and hybrids
-    _basename = tab_result['species']
-    _authors = ' '.join(tab_taxon[2:len(tab_taxon)])
-    if tab_result['rank'] == 'Hybrid':
-        tab_result['prefix'] ='x'
-        _basename = tab_taxon[2]
-        tab_result['species'] = _basename
-        _authors = ' '.join(tab_taxon[index+2:len(tab_taxon)])
-        tab_result["name"] = ' '.join([tab_result['genus'], tab_result['prefix'], tab_result['species']])
-    elif index == len(tab_taxon)-2: #the taxa is ending by 'rank basename'
-        _basename = tab_taxon[-1] 
-        _authors = ' '.join(tab_taxon[2:index]) #suppoe authors between epithet and prefix
-        tab_result['infraspecies'] = _basename #
-        _name = ' '.join (tab_taxon[-2:]) #composite 'rank_basename'
-        tab_result["name"] =  ' '.join([tab_result["name"], _name])
-    elif index > 0: #the infraspecific prefix is not the penultimate term
-        _basename = tab_taxon[index+1] ##' '.join(tab_taxon[index+1:index+2])
-        _authors =  ' '.join(tab_taxon[index+2:len(tab_taxon)])
-        tab_result['infraspecies'] = _basename
-        tab_result["name"] =' '.join([tab_result["name"],tab_result['prefix'], _basename])
-    tab_result['basename'] = _basename.lower()
-    
-    #clean empty values
-    for value in tab_result.values():
-        if value is None: 
-            value =''
-        value = value.strip()
-        if value.lower() == 'null': 
-            value =''
-        
-    #manage autonyms
-    tab_result['autonym'] = (tab_result['infraspecies'] == tab_result['species'])
-    if tab_result['autonym']:
-        _authors = ''
-    #manage authors
-    _authors = _authors.strip()
-    if _authors.lower() in ['sensu', 'ined', 'ined.', 'comb. ined.', 'comb ined']: 
-        _authors =''
-    tab_result['authors'] = _authors
+        if rank_index is not None:
+            if rank_index + 1 >= len(tokens):
+                return None
+            result['infraspecies'] = tokens[rank_index + 1].lower()
+            result['basename'] = result['infraspecies']
+            result['name'] += f" {result['prefix']} {result['infraspecies']}"
+            authors_start = rank_index + 2
 
-    #get a list of all the names according to nomenclature
-    tab_allnames = []
-    _name = ' '.join([tab_result["genus"], tab_result["species"]])
-    _authors = tab_result["authors"]
+    # --------------------------------------------------
+    # 4. Authors
+    # --------------------------------------------------
+    authors = ' '.join(tokens[authors_start:]).strip()
 
-    if tab_result["rank"] == 'Hybrid':
-        _name = ' '.join([tab_result["genus"], tab_result["prefix"],tab_result["species"]])
+    if authors.lower() in {'sensu', 'ined', 'ined.', 'comb. ined.', 'comb ined'}:
+        authors = ''
 
-    if tab_result["infraspecies"] != '':
-        #add simple name (= name_prefix_infra)
-        _syno = ' '.join([_name, tab_result["prefix"], tab_result["infraspecies"]])
-        tab_allnames.append(_syno.strip())
-        if _authors !='':
-            #version with authors
-            _syno = ' '.join([_syno, _authors])
-            tab_allnames.append(_syno.strip())
-            #version for autonyms (name_authors_prefix_infra)
-            if tab_result['autonym']:
-                _syno = ' '.join([_name, _authors, tab_result["prefix"],tab_result["infraspecies"]])
-                tab_allnames.append(_syno.strip()) 
-    else :
-        #add simple name
-        tab_allnames.append(_name)
-        #version with authors
-        if _authors !='':
-            _syno = ' '.join([_name, _authors])
-            tab_allnames.append(_syno.strip())         
-    tab_result["names"] = tab_allnames
-    return tab_result
+    result['authors'] = authors
+
+    # --------------------------------------------------
+    # 5. Autonym
+    # --------------------------------------------------
+    if result['infraspecies'] and result['infraspecies'] == result['species']:
+        result['autonym'] = True
+        result['authors'] = ''
+
+    # --------------------------------------------------
+    # 6. Generate all nomenclatural names
+    # --------------------------------------------------
+    base_name = f"{result['genus']} {result['species']}"
+
+    if result['rank'] == 'Hybrid':
+        base_name = f"{result['genus']} x {result['species']}"
+
+    names = []
+
+    if result['infraspecies']:
+        n = f"{base_name} {result['prefix']} {result['infraspecies']}"
+        names.append(n)
+        if result['authors']:
+            names.append(f"{n} {result['authors']}")
+            if result['autonym']:
+                names.append(
+                    f"{base_name} {result['authors']} {result['prefix']} {result['infraspecies']}"
+                )
+    else:
+        names.append(base_name)
+        if result['authors']:
+            names.append(f"{base_name} {result['authors']}")
+
+    result['names'] = names
+
+    return result
 
 
-
-
-
-
-
-
-# def get_str_lower_nospace(txt):
-#     return txt.replace(" ", "").lower()
-
-# def get_dict_rank_childs(idrank):
-#     tab_childs ={}
-#     if idrank == 1:
-#         tab_childs.append(get_dict_rank_value(2))
-#         tab_childs.append(get_dict_rank_value(3))
-
-#     return tab_childs
-
-
-# def get_taxa_metadata(myPNTaxa):
-#     sql_query = "SELECT a.metadata FROM taxonomy.taxa_reference a"
-#     sql_query += "\nWHERE a.id_taxonref = " + str(myPNTaxa.idtaxonref)
-#     query = QtSql.QSqlQuery(sql_query)
-    
-#     query.next()
-#     if not query.isValid():
-#         return
-#     if query.isNull("metadata"):
-#         return
-#     try:
-#         json_data = query.value("metadata")
-#     except Exception:
-#         json_data = None
-#         return
-    
-#     if json_data is None:
-#         return
-#     dict_db_properties = {}
-#     for item, value in json.loads(json_data).items():
-#         if  item not in dict_db_properties:
-#             dict_db_properties[item] = {}
-#         keys = ['url', 'webpage', '_links']
-#         for key in keys:
-#             if value.get(key,None) is not None:
-#                 dict_db_properties[item][key] = value[key]
-
-#     dict_db_properties = json.loads(json_data)
-#     return dict_db_properties
-
-# def get_traits_occurrences(myPNTaxa):
-#     """     
-#     Return a json (dictionnary of sub-dictionnaries of taxa traits from amap_data_occurences
-#     """
-#     selecteditem = myPNTaxa
-#     if selecteditem  is None: 
-#         return
-
-#     sql_txt ="""
-#      WITH dat_occ AS (SELECT * FROM amap_data_occurrences
-#                         WHERE id_taxonref IN (SELECT id_taxonref FROM taxonomy.pn_taxa_childs (id_taxon_toreplace, True)))		
-                        
-# 	SELECT
-# 		'dbh (cm)'::TEXT AS category,
-#         count (b.dbh)::integer count,
-#         avg(b.dbh) FILTER (WHERE b.dbh >5)::numeric(6,2) avg, 
-#         NULL::numeric(6,2) min,        
-#         max(b.dbh)::numeric(6,2) max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.dbh asc) FILTER (WHERE b.dbh > 5)::numeric(6,2) as median,
-#         stddev(b.dbh)::numeric(6,2) stdv,
-#         1 pos
-#     FROM dat_occ b 
-#    	UNION
-# 	SELECT
-# 		'height (m)'::TEXT AS category,
-#         count (b.height)::integer count,
-#         avg(b.height)::numeric(6,2) avg, 
-#         NULL::numeric(6,2) min,
-#         max(b.height)::numeric(6,2) max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.height asc)::numeric(6,2) as median,
-#         stddev(b.height)::numeric(6,2) stdv,
-#         2 pos
-#     FROM dat_occ b 
-#     UNION 
-#     SELECT
-# 		'wood density (g/cm3)'::TEXT AS category,
-#         count (b.wood_density)::integer count,
-#         avg(b.wood_density)::numeric(6,2) avg, 
-#         min(b.wood_density)::numeric(6,2) min, 
-#         max(b.wood_density)::numeric(6,2) max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.wood_density asc)::numeric(6,2) as median,
-#         stddev(b.wood_density)::numeric(6,2) stdv,
-#         3 pos
-#     FROM dat_occ b
-#     UNION
-#     SELECT
-# 		'leaf area (mm²)'::TEXT AS category,
-#         count (b.leaf_area)::integer count,	
-#         avg(b.leaf_area) ::numeric(6,2)  avg,
-#         min(b.leaf_area) ::numeric(6,2)  min,
-#         max(b.leaf_area) ::numeric(6,2)  max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.leaf_area asc)::numeric(6,2) as median,
-#         stddev(b.leaf_area)::numeric(6,2) stdv,
-#         4 pos
-#     FROM dat_occ b 
-#     UNION
-#     SELECT
-# 		'leaf sla (mm²/mg)'::TEXT AS category,
-#         count (b.leaf_sla)::integer count,	
-#         avg(b.leaf_sla) ::numeric(6,2) avg,
-#         min(b.leaf_sla) ::numeric(6,2) min,
-#         max(b.leaf_sla) ::numeric(6,2) max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.leaf_sla asc)::numeric(6,2) as median,
-#         stddev(b.leaf_sla)::numeric(6,2) stdv,
-#         5 pos
-#     FROM dat_occ b
-#     UNION
-#     SELECT
-#     	'leaf ldmc (mg/g)'::TEXT AS category,
-#         count (b.leaf_ldmc)::integer count,	
-#         avg(b.leaf_ldmc) ::numeric(6,2)  avg,
-#         min(b.leaf_ldmc) ::numeric(6,2)  min,
-#         max(b.leaf_ldmc) ::numeric(6,2)  max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.leaf_ldmc asc)::numeric(6,2) as median,
-#         stddev(b.leaf_ldmc)::numeric(6,2) stdv,
-#         6 pos
-#     FROM dat_occ b
-#     UNION
-#     SELECT
-#     	'leaf thickness (µm)'::TEXT AS category,
-#         count (b.leaf_thickness)::integer count,	
-#         avg(b.leaf_thickness) ::numeric(6,2)  avg,
-#         min(b.leaf_thickness) ::numeric(6,2)  min,
-#         max(b.leaf_thickness) ::numeric(6,2)  max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.leaf_thickness asc)::numeric(6,2) as median,
-#         stddev(b.leaf_thickness)::numeric(6,2) stdv,
-#         7 pos
-#     FROM dat_occ b
-#     UNION
-#     SELECT
-#     	'bark thickness (mm)'::TEXT AS category,
-#         count (b.bark_thickness)::integer count,	
-#         avg(b.bark_thickness) ::numeric(6,2)  avg,
-#         min(b.bark_thickness) ::numeric(6,2)  min,
-#         max(b.bark_thickness) ::numeric(6,2)  max,
-#         percentile_cont(0.50) WITHIN GROUP (ORDER BY b.bark_thickness asc)::numeric(6,2) as median,
-#         stddev(b.bark_thickness)::numeric(6,2) stdv,
-#         8 pos
-#     FROM dat_occ b
-#     ORDER BY pos
-#     """
-
-#     sql_txt = sql_txt.replace('id_taxon_toreplace', str(selecteditem.idtaxonref))
-#     #print (sql_txt)
-#     query = QtSql.QSqlQuery(sql_txt)
-#     tab_traits = {}
-#     while query.next():
-#         #to ensure order 
-#         tab_trait ={'avg':'', "count":'', "min":'', "max":'', "median":'', "stdv":''}
-#         for _key, _value in tab_trait.items():
-#             tab_trait[_key] = get_str_value(query.value(_key))
-#         tab_traits[query.value("category")] = tab_trait 
-#     #print(tab_traits)
-#     return tab_traits
-
-#     sql_txt = sql_txt.replace('id_taxon_toreplace', str(selecteditem.idtaxonref))
-#     query = QtSql.QSqlQuery(sql_txt)
-#     tab_traits = {}
-#     while query.next():
-#         value = json.loads(query.value("json_value"))[0]
-#         #to ensure order 
-#         tab_trait ={'avg':'', "count":'', "min":'', "max":'', "median":'', "stdv":''}
-#         for _key, _value in value.items():
-#             tab_trait[_key] = get_str_value(_value)
-#         tab_traits[query.value("category")] = tab_trait 
-#     #print(tab_traits)
-#     return tab_traits
 
 
 
