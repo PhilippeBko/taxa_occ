@@ -5,10 +5,12 @@ icons/
 .DS_Store
 *.pyc
 *.pyo
-api_endemia.py
 _icons.qrc
-import_csv.py
 pn_import.ui
-raster_bandvalue.py
+config.db
+
 test.py
 test_gdal.py
+api_endemia.py
+import_csv.py
+raster_bandvalue.py

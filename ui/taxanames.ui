@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1025</width>
+    <width>1460</width>
     <height>800</height>
    </rect>
   </property>
@@ -20,7 +20,7 @@
    <string>Taxonomy manager</string>
   </property>
   <property name="windowIcon">
-   <iconset resource="../_icons.qrc">
+   <iconset resource="../_ressources.qrc">
     <normaloff>:/icons/x-nomen.png</normaloff>:/icons/x-nomen.png</iconset>
   </property>
   <property name="autoFillBackground">
@@ -312,7 +312,7 @@
                </font>
               </property>
               <property name="text">
-               <string>TextLabel</string>
+               <string>no Data</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -401,7 +401,7 @@
                  <string>Add</string>
                 </property>
                 <property name="icon">
-                 <iconset resource="../_icons.qrc">
+                 <iconset resource="../_ressources.qrc">
                   <normaloff>:/icons/add.png</normaloff>:/icons/add.png</iconset>
                 </property>
                 <property name="iconSize">
@@ -427,7 +427,7 @@
                  <string>Edit</string>
                 </property>
                 <property name="icon">
-                 <iconset resource="../_icons.qrc">
+                 <iconset resource="../_ressources.qrc">
                   <normaloff>:/icons/editing.png</normaloff>:/icons/editing.png</iconset>
                 </property>
                 <property name="iconSize">
@@ -453,7 +453,7 @@
                  <string>Merge</string>
                 </property>
                 <property name="icon">
-                 <iconset resource="../_icons.qrc">
+                 <iconset resource="../_ressources.qrc">
                   <normaloff>:/icons/merge.png</normaloff>:/icons/merge.png</iconset>
                 </property>
                 <property name="iconSize">
@@ -495,7 +495,7 @@
                  <string>Remove</string>
                 </property>
                 <property name="icon">
-                 <iconset resource="../_icons.qrc">
+                 <iconset resource="../_ressources.qrc">
                   <normaloff>:/icons/remove.png</normaloff>:/icons/remove.png</iconset>
                 </property>
                 <property name="iconSize">
@@ -601,7 +601,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>211</width>
+          <width>356</width>
           <height>539</height>
          </rect>
         </property>
@@ -644,7 +644,7 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>211</width>
+          <width>356</width>
           <height>539</height>
          </rect>
         </property>
@@ -655,23 +655,19 @@
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_2">
            <item>
-            <widget class="QDialogButtonBox" name="buttonBox_metadata">
+            <widget class="QPushButton" name="buttonBox_metadata">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
              </property>
-             <property name="font">
-              <font>
-               <pointsize>9</pointsize>
-              </font>
+             <property name="text">
+              <string>Refresh</string>
              </property>
-             <property name="styleSheet">
-              <string notr="true"/>
-             </property>
-             <property name="standardButtons">
-              <set>QDialogButtonBox::Reset</set>
+             <property name="icon">
+              <iconset resource="../_ressources.qrc">
+               <normaloff>:/icons/refresh.png</normaloff>:/icons/refresh.png</iconset>
              </property>
             </widget>
            </item>
@@ -697,8 +693,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>272</width>
-          <height>525</height>
+          <width>356</width>
+          <height>539</height>
          </rect>
         </property>
         <attribute name="label">
@@ -716,8 +712,8 @@
               <string>Add</string>
              </property>
              <property name="icon">
-              <iconset>
-               <normaloff>../icons/plus.png</normaloff>../icons/plus.png</iconset>
+              <iconset resource="../_ressources.qrc">
+               <normaloff>:/icons/plus.png</normaloff>:/icons/plus.png</iconset>
              </property>
              <property name="iconSize">
               <size>
@@ -751,8 +747,8 @@
               <string>Edit</string>
              </property>
              <property name="icon">
-              <iconset>
-               <normaloff>../icons/pen.png</normaloff>../icons/pen.png</iconset>
+              <iconset resource="../_ressources.qrc">
+               <normaloff>:/icons/pen.png</normaloff>:/icons/pen.png</iconset>
              </property>
              <property name="iconSize">
               <size>
@@ -768,8 +764,8 @@
               <string>Remove</string>
              </property>
              <property name="icon">
-              <iconset>
-               <normaloff>../icons/delete.png</normaloff>../icons/delete.png</iconset>
+              <iconset resource="../_ressources.qrc">
+               <normaloff>:/icons/delete.png</normaloff>:/icons/delete.png</iconset>
              </property>
              <property name="iconSize">
               <size>
@@ -793,7 +789,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1025</width>
+     <width>1460</width>
      <height>24</height>
     </rect>
    </property>
@@ -849,7 +845,7 @@
   </action>
  </widget>
  <resources>
-  <include location="../_icons.qrc"/>
+  <include location="../_ressources.qrc"/>
  </resources>
  <connections/>
 </ui>

@@ -1,0 +1,30 @@
+<RCC>
+ <qresource prefix="/">
+  <file>icons/x-nomen.png</file>
+  <file>icons/add.png</file>
+  <file>icons/editing.png</file>
+  <file>icons/remove.png</file>
+  <file>icons/merge.png</file>
+  <file>icons/move.png</file>
+  <file>icons/arrow1.png</file>
+  <file>icons/arrow2.png</file>
+  <file>icons/plus.png</file>
+  <file>icons/pen.png</file>
+  <file>icons/delete.png</file>
+  <file>icons/refresh.png</file>
+  <file>icons/ok.png</file>
+  <file>icons/nok.png</file>
+  <file>icons/warning.png</file>
+  <file>icons/question.png</file>
+  <file>icons/critical.png</file>
+  <file>icons/test.png</file>
+
+  <file>ui/taxanames.ui</file>
+  <file>ui/pn_addtaxa.ui</file>
+  <file>ui/pn_edittaxa.ui</file>
+  <file>ui/pn_movetaxa.ui</file>
+  <file>ui/pn_editname.ui</file>
+  
+ </qresource>
+</RCC>
+

@@ -863,41 +863,42 @@ RETURNS TABLE(id_taxonref integer)
 LANGUAGE sql
 STABLE
 AS $$
-WITH RECURSIVE params AS (
-    SELECT
-        CASE
-            WHEN linked_ranks = FALSE THEN 1000
-            WHEN w.id_rank IN (6, 8, 10, 12) THEN w.id_rank + 1
-            WHEN w.id_rank >= 14 THEN 1000
-            ELSE w.id_rank
-        END AS idrank_max
-    FROM taxonomy.taxa_reference w
-    WHERE w.id_taxonref = idtaxonref
-),
-taxa_tree AS (
-    -- anchor
-    SELECT t1.id_taxonref
-    FROM taxonomy.taxa_reference t1
-    CROSS JOIN params p
-    WHERE t1.id_rank <= p.idrank_max
-      AND (
-        CASE WHEN included
-             THEN t1.id_taxonref
-             ELSE t1.id_parent
-        END = idtaxonref
-      )
-
-    UNION ALL
-
-    -- recursivity
-    SELECT t2.id_taxonref
-    FROM taxonomy.taxa_reference t2
-    JOIN taxa_tree e ON t2.id_parent = e.id_taxonref
-    CROSS JOIN params p
-    WHERE t2.id_rank <= p.idrank_max
-)
-SELECT id_taxonref
-FROM taxa_tree;
+	WITH RECURSIVE 
+	params AS (
+	    SELECT
+	        CASE
+	            WHEN linked_ranks = FALSE THEN 1000
+	            WHEN w.id_rank IN (6, 8, 10, 12) THEN w.id_rank + 1
+	            WHEN w.id_rank >= 14 THEN 1000
+	            ELSE w.id_rank
+	        END AS idrank_max
+	    FROM taxonomy.taxa_reference w
+	    WHERE w.id_taxonref = idtaxonref
+	),
+	taxa_tree AS (
+	    -- anchor
+	    SELECT t1.id_taxonref
+	    FROM taxonomy.taxa_reference t1
+	    CROSS JOIN params p
+	    WHERE t1.id_rank <= p.idrank_max
+	      AND (
+	        CASE WHEN included
+	             THEN t1.id_taxonref
+	             ELSE t1.id_parent
+	        END = idtaxonref
+	      )
+	
+	    UNION ALL
+	
+	    -- recursivity
+	    SELECT t2.id_taxonref
+	    FROM taxonomy.taxa_reference t2
+	    JOIN taxa_tree e ON t2.id_parent = e.id_taxonref
+	    CROSS JOIN params p
+	    WHERE t2.id_rank <= p.idrank_max
+	)
+	SELECT id_taxonref
+	FROM taxa_tree;
 $$;
 COMMENT ON FUNCTION taxonomy.pn_taxa_childs(INTEGER, BOOLEAN, BOOLEAN) IS 'Returns the child idtaxonref for the given idtaxonref argument, including it based on the included variable (DEFAULT = FALSE) and restricted (DEFAULT = FALSE) to child linked ranks';	
 

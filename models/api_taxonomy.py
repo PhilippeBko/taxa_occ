@@ -215,7 +215,7 @@ class API_Abstract ():
 
         #error handling to log_request
         if self.API_result is None:
-            self.API_error = "Connection error - no response from API"
+            self.API_error = f"{self.taxaname} not found"
             return
         #check and force self.API_result to be a list
         if not isinstance(self.API_result, list):
@@ -239,7 +239,7 @@ class API_Abstract ():
             pass
         self.ls_metadata["query time"] =  time.strftime("%Y-%m-%d %H:%M:%S")
         if not self.API_taxon:
-            self.API_error = f"No result - taxon {self.taxaname} is not found"
+            self.API_error = f"{self.taxaname} is not found"
 
     def get_dict_value(self, dictionary, key):
         """

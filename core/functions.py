@@ -12,25 +12,53 @@ def resource_path(*paths):
     return os.path.join(BASE_DIR, *paths)
 
 
+
+
 # functions.py
+class ServiceRegistry:
+    def __init__(self, dbconn, taxa=None, plot=None):
+        self.db = dbconn
+        self.taxa = taxa
+        self.plot = plot
 
-class AppContext:
-    def __init__(self, PN_database):
-        self.dbtaxa = PN_database
+
+_registry = None
+
+def init_registry(registry):
+    global _registry
+    if _registry is not None:
+        raise RuntimeError("Registry already initialized")
+    _registry = registry
+
+def services():
+    if _registry is None:
+        raise RuntimeError("Registry not initialized")
+    return _registry
+
+def dbtaxa():
+    return services().taxa
+
+def db():
+    return services().db
 
 
-_context = None
+# class AppContext:
+#     def __init__(self, PN_database):
+#         self.dbtaxa = PN_database
 
-def init_context(context: AppContext):
-    global _context
-    if _context is not None:
-        raise RuntimeError("Context already initialized")
-    _context = context
 
-def dbase() -> AppContext:
-    if _context is None:
-        raise RuntimeError("Context not initialized")
-    return _context.dbtaxa
+# _context = None
+
+# def init_context(context: AppContext):
+#     global _context
+#     if _context is not None:
+#         raise RuntimeError("Context already initialized")
+#     _context = context
+
+# def dbase() -> AppContext:
+#     if _context is None:
+#         raise RuntimeError("Context not initialized")
+#     return _context.dbtaxa
 
 
 
