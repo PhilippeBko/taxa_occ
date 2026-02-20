@@ -135,44 +135,44 @@ list_db_fields = list_db_identity | list_db_traits
 list_numeric_db_fields = {key: value for key, value in list_db_fields.items() if value["type"] == "numeric"}
 
 
-list_db_properties = {
-    # "identity":{"name": {"type": "text"}, 
-    #             "authors": {"type": "text"}, 
-    #             "published": {"type": 'boolean'},
-    #             "rank": {"type": 'text', "items": ['Species', 'Subspecies', 'Variety', 'Hybrid']},
-    #            },
-    "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound', 'Phyllode']}, 
-             "phyllotaxy": {"type": "text", "items": ['Alternate', 'Opposite', 'Verticillate']}, 
-             "stipulate": {"type": 'boolean'}
-             },
-    "habit": {"epiphyte": {"type": 'boolean'},
-                "herbaceous": {"type": 'boolean'},
-                "liana": {"type": 'boolean'},
-                "parasite": {"type": 'boolean'},
-                "shrub": {"type": 'boolean'},
-                "tree": {"type": 'boolean'}
-             },
-    "sexual": {"dioecious": {"type": 'boolean'},
-                "hermaphrodite": {"type": 'boolean'},
-                "fleshy fruit": {"type": 'boolean'}, 
-                "dispersal unit": {"type": 'text', "items": ['Seed', 'Fruit']}
-             },
-    "architecture": {"model": {"type": 'text', "items": ['Attims','Aubreville','Chamberlain','Champagnat','Cook','Corner','Fagerlind','Holtum','Koriba','Leuwenberg','Mangenot','Massart','McClure','Nozeran','Petit','Prevost','Rauh','Roux','Scarrone','Schoute','Stone','Tomlinson','Troll']},
-                    "monocaulous": {"type": 'boolean'},
-                    "cauliflorous": {"type": 'boolean'}, 
-                    "rythmic growth": {"type": 'boolean'}
-             },
-    "disperser": {"anemochory": {"type": 'boolean'}, 
-                    "barochory": {"type": 'boolean'}, 
-                    "entomochory": {"type": 'boolean'}, 
-                    "ornitochory": {"type": 'boolean'}, 
-                    "myrmecochory": {"type": 'boolean'}, 
-                    "saurochory": {"type": 'boolean'},
-                    "zoochorie": {"type": 'boolean'}
-             },
-    "new caledonia": {"status": {"type": 'text', "items": ['Endemic','Autochtonous','Introduced']}
-     }
-}
+# list_db_properties = {
+#     # "identity":{"name": {"type": "text"}, 
+#     #             "authors": {"type": "text"}, 
+#     #             "published": {"type": 'boolean'},
+#     #             "rank": {"type": 'text', "items": ['Species', 'Subspecies', 'Variety', 'Hybrid']},
+#     #            },
+#     "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound', 'Phyllode']}, 
+#              "phyllotaxy": {"type": "text", "items": ['Alternate', 'Opposite', 'Verticillate']}, 
+#              "stipulate": {"type": 'boolean'}
+#              },
+#     "habit": {"epiphyte": {"type": 'boolean'},
+#                 "herbaceous": {"type": 'boolean'},
+#                 "liana": {"type": 'boolean'},
+#                 "parasite": {"type": 'boolean'},
+#                 "shrub": {"type": 'boolean'},
+#                 "tree": {"type": 'boolean'}
+#              },
+#     "sexual": {"dioecious": {"type": 'boolean'},
+#                 "hermaphrodite": {"type": 'boolean'},
+#                 "fleshy fruit": {"type": 'boolean'}, 
+#                 "dispersal unit": {"type": 'text', "items": ['Seed', 'Fruit']}
+#              },
+#     "architecture": {"model": {"type": 'text', "items": ['Attims','Aubreville','Chamberlain','Champagnat','Cook','Corner','Fagerlind','Holtum','Koriba','Leuwenberg','Mangenot','Massart','McClure','Nozeran','Petit','Prevost','Rauh','Roux','Scarrone','Schoute','Stone','Tomlinson','Troll']},
+#                     "monocaulous": {"type": 'boolean'},
+#                     "cauliflorous": {"type": 'boolean'}, 
+#                     "rythmic growth": {"type": 'boolean'}
+#              },
+#     "disperser": {"anemochory": {"type": 'boolean'}, 
+#                     "barochory": {"type": 'boolean'}, 
+#                     "entomochory": {"type": 'boolean'}, 
+#                     "ornitochory": {"type": 'boolean'}, 
+#                     "myrmecochory": {"type": 'boolean'}, 
+#                     "saurochory": {"type": 'boolean'},
+#                     "zoochorie": {"type": 'boolean'}
+#              },
+#     "new caledonia": {"status": {"type": 'text', "items": ['Endemic','Autochtonous','Introduced']}
+#      }
+# }
 
 flower_reg_pattern = r'fl\.*|bt\.*|boutons?|cauliflor(e|a|ous)?|fert(?:ile|\.|)|fleurs?|inflorescences?|flowers?|buttons?|inflos?'
 fruit_reg_pattern = r'fr\.*|figues?|fruits?|c[ôo]nes?|graines?|seeds?|figs?'

@@ -1,6 +1,9 @@
 import json
 import re
+import subprocess
 from PyQt5 import  QtSql
+from PyQt5.QtCore import QFile, QTextStream
+
 from core import functions
 import uuid
 
@@ -22,10 +25,15 @@ class DatabaseConnection:
             print(f"Warning, section [{section}] not found in config file : {config_path}")
             return False
         
-        return self.open(config['postgresql']['host'], 
+        connected = self.open(config['postgresql']['host'], 
                             config['postgresql']['user'], 
                             config['postgresql']['password'], 
                             config['postgresql']['database'])
+        if connected:
+            return self.check_schema_and_tables()
+        return False 
+
+
 
     def open(self, host, user, password, database, port = 5432):
         if self.db:
@@ -67,38 +75,42 @@ class DatabaseConnection:
         tab_text = error.text().split("\n")
         return '\n'.join(tab_text[:3])
 
-#     def run_sql_scripts(self, db_name, host, user, password):
-#         # Vérifier si le schema existe
-#         sql_query = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'taxonomy';"
-#         query = self.db.exec(sql_query)
-#         schema_exists = query.next()
-#         if schema_exists:
-#             return 
+    def check_schema_and_tables(self):
+        dbschema = 'taxonomy'
+        dbtables = ['taxa_reference', 'taxa_rank', 'taxa_nameset', 'taxa_wfo']
+        sql_query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{dbschema}'"
+        query = self.db.exec(sql_query)
+        tables_list = []
+        while query.next():
+            tables_list.append(query.value("table_name"))
+        result = all(item in tables_list for item in dbtables)
+        if result:
+            print ("Schema and Tables OK")
+            return True
+        else:
+            print ("Error : Schema and/or tables are not present")
+            #return False
 
 #     # Schema absent → exécuter les scripts
-#         scripts = ['/home/birnbaum/Documents/Calédonie/sql/dbeaver/workspace6/data_occurrences/Scripts/taxa_occ/create_schema_taxonomy.sql',
-#                    '/home/birnbaum/Documents/Calédonie/sql/dbeaver/workspace6/data_occurrences/Scripts/taxa_occ/config_schema_taxonomy.sql']
-        
-#         for script_path in scripts:
-#             if not os.path.isfile(script_path):
-#                 print (f"SQL File not found : {script_path}")
-
-#             # send scripts to psql
-#             cmd = [
-#                 "psql",
-#                 "-d", self.db.databaseName(),
-#                 "-h", host,
-#                 "-U", user,
-#                 "-f", script_path
-#             ]
-#             try:
-#                 # 
-#                 subprocess.run(cmd, capture_output=True, text=True, check=True)
-#                 #print(result.stdout)
-#             except subprocess.CalledProcessError as e:
-#                 print (f"Error in execution {script_path} : {e.stderr}")
-
-#         return 
+            scripts = ['create_schema_taxonomy.sql','config_schema_taxonomy.sql']
+            for script_path in scripts:
+                file = QFile(f":/sql/{script_path}")
+                if not file.open(QFile.ReadOnly | QFile.Text):
+                    raise RuntimeError(f"Error in opening : {script_path}")
+                stream = QTextStream(file)
+                stream.setCodec("UTF-8")
+                sql = stream.readAll()
+                self.exec(sql)
+                #print (self.postgres_error)
+                # file.close()
+                # try:
+                #     # 
+                #     subprocess.run(cmd, capture_output=True, text=True, check=True)
+                #     #print(result.stdout)
+                # except subprocess.CalledProcessError as e:
+                #     print (f"Error in execution {script_path} : {e.stderr}")
+                #     return False
+            return True
 #     
 
 
@@ -111,7 +123,41 @@ class PN_dbTaxa:
         self.ls_taxa_groups = None
 
 #############################
-   
+    @property
+    def db_dic_properties(self):
+        return {
+            "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound', 'Phyllode']}, 
+                    "phyllotaxy": {"type": "text", "items": ['Alternate', 'Opposite', 'Verticillate']}, 
+                    "stipulate": {"type": 'boolean'}
+                    },
+            "habit": {"epiphyte": {"type": 'boolean'},
+                        "herbaceous": {"type": 'boolean'},
+                        "liana": {"type": 'boolean'},
+                        "parasite": {"type": 'boolean'},
+                        "shrub": {"type": 'boolean'},
+                        "tree": {"type": 'boolean'}
+                    },
+            "sexual": {"dioecious": {"type": 'boolean'},
+                        "hermaphrodite": {"type": 'boolean'},
+                        "fleshy fruit": {"type": 'boolean'}, 
+                        "dispersal unit": {"type": 'text', "items": ['Seed', 'Fruit']}
+                    },
+            "architecture": {"model": {"type": 'text', "items": ['Attims','Aubreville','Chamberlain','Champagnat','Cook','Corner','Fagerlind','Holtum','Koriba','Leuwenberg','Mangenot','Massart','McClure','Nozeran','Petit','Prevost','Rauh','Roux','Scarrone','Schoute','Stone','Tomlinson','Troll']},
+                            "monocaulous": {"type": 'boolean'},
+                            "cauliflorous": {"type": 'boolean'}, 
+                            "rythmic growth": {"type": 'boolean'}
+                    },
+            "disperser": {"anemochory": {"type": 'boolean'}, 
+                            "barochory": {"type": 'boolean'}, 
+                            "entomochory": {"type": 'boolean'}, 
+                            "ornitochory": {"type": 'boolean'}, 
+                            "myrmecochory": {"type": 'boolean'}, 
+                            "saurochory": {"type": 'boolean'},
+                            "zoochorie": {"type": 'boolean'}
+                    },
+            "new caledonia": {"status": {"type": 'text', "items": ['Endemic','Autochtonous','Introduced']}
+            }
+}
     def field_dbase(self, fieldname, id_taxonref):
         """get a field value from the taxonomy.taxa_reference according to a id_taxonref"""
         sql_query = f"""
@@ -345,6 +391,41 @@ class PN_dbTaxa:
         return taxa_dict
 
 
+    def db_get_childs (self, ls_idtaxonref):
+        """
+            return a list of childs from a list of id_taxonref
+        """
+        if not isinstance(ls_idtaxonref, list):
+            ls_idtaxonref = [ls_idtaxonref]
+        ls_idtaxonref = ",".join(map(str, ls_idtaxonref))
+
+        # sql_query = f"""
+        #         SELECT a.id_taxonref, a.id_rank 
+        #         FROM taxonomy.taxa_reference a
+        #         INNER JOIN 
+        #         (SELECT DISTINCT
+        #         taxonomy.pn_taxa_childs(id_taxonref, False) id_taxonref
+        #         FROM taxonomy.taxa_reference
+        #         WHERE id_taxonref IN ({ls_idtaxonref})
+        #         ) b ON a.id_taxonref = b.id_taxonref
+        #         ORDER BY a.id_rank;
+        # """
+        sql_query = f"""
+                SELECT DISTINCT
+                taxonomy.pn_taxa_childs(id_taxonref, True) id_taxonref
+                FROM taxonomy.taxa_reference
+                WHERE id_taxonref IN ({ls_idtaxonref});
+        """
+                                               
+        #execute the query
+        query = self.db.exec(sql_query)
+        ls_childs = []
+        while query.next():
+            ls_childs.append(query.value(0))
+        query.finish()  
+        del query
+        return ls_childs
+    
     
     def db_get_names(self, id_taxonref):
         """return a dictionnary of list of all the names linked to a id_taxonref and organized by categories
@@ -378,7 +459,7 @@ class PN_dbTaxa:
     def db_get_apg4_clades (self):
         #return the list of distinct clades from the apg4 table (field clade), [] if nothing
         #typically ['ANA Grade', 'Ceratophyllales', 'Chloranthales', 'Core Eudicots', 'Magnoliids', 'Monocots']
-        #sql_query = "SELECT json_agg(DISTINCT a.group_taxa) AS json_list FROM taxonomy.wfo_order a WHERE a.group_taxa IS NOT NULL;"
+        #sql_query = "SELECT json_agg(DISTINCT a.major_plant_group) AS json_list FROM taxonomy.wfo_order a WHERE a.major_plant_group IS NOT NULL;"
         if self.ls_taxa_groups:
             return self.ls_taxa_groups
         sql_query = """
@@ -386,7 +467,7 @@ class PN_dbTaxa:
                     FROM
                         (SELECT clade_apg AS clade, 1 AS orderby FROM taxonomy.taxa_wfo
                             UNION
-                         SELECT group_taxa AS clade, 0 AS orderby FROM taxonomy.taxa_wfo
+                         SELECT major_plant_group AS clade, 0 AS orderby FROM taxonomy.taxa_wfo
                         )
                     WHERE clade IS NOT NULL
                     ORDER BY orderby, clade;
@@ -415,7 +496,7 @@ class PN_dbTaxa:
         #                         t.authors
         #                     FROM taxonomy.taxa_wfo t
         #                     --WHERE t.basename = '{basename}'
-        #                     --WHERE t.group_taxa = 'Bryophytes'
+        #                     --WHERE t.major_plant_group = 'Bryophytes'
 
         #                     UNION 
 
@@ -438,8 +519,8 @@ class PN_dbTaxa:
         sql_where = ''
         if basename:
             basename = basename.strip().lower()
-            #sql_where = f"""WHERE lower(t.basename) = '{basename}' OR lower(t.group_taxa) = '{basename}' OR lower(t.clade_apg) ='{basename}'"""
-            sql_where = f"""WHERE '{basename}' IN (lower(t.basename), lower(t.group_taxa), lower(t.clade_apg))"""
+            #sql_where = f"""WHERE lower(t.basename) = '{basename}' OR lower(t.major_plant_group) = '{basename}' OR lower(t.clade_apg) ='{basename}'"""
+            sql_where = f"""WHERE '{basename}' IN (lower(basename), lower(major_plant_group), lower(clade_apg))"""
         sql_query = f"""WITH RECURSIVE
                         anchor AS (
                             SELECT
@@ -487,35 +568,84 @@ class PN_dbTaxa:
                         LEFT JOIN taxonomy.taxa_reference d ON lower(a.basename) =  d.basename
                         ORDER BY a.id_rank; """
         
+
+        sql_query = f"""
+                        WITH RECURSIVE
+                        wfo_indexing AS MATERIALIZED (
+                            SELECT ROW_NUMBER() OVER (ORDER BY a.id_rank, a.basename ) AS id,
+                            a.* 
+                            FROM taxonomy.taxa_wfo a 
+                        ),
+                        wfo AS (
+                            SELECT a.id, a.basename, a.id_rank, b.id AS id_parent, a.parent, a.authors, a.major_plant_group, a.clade_apg 
+                            FROM wfo_indexing a 
+                            LEFT JOIN wfo_indexing b
+                            ON a.parent = b.basename
+                        ),
+                        anchor AS (
+                            SELECT
+                                c.id, c.id_parent, c.id_rank, c.basename, c.authors, c.parent
+                            FROM wfo c
+                            {sql_where}
+                        ),
+                        children AS (
+                            SELECT * FROM anchor
+                            UNION ALL
+                            SELECT
+                                c.id, c.id_parent, c.id_rank, c.basename, c.authors, c.parent
+                            FROM wfo c
+                            JOIN children p ON c.id_parent = p.id
+                        ),
+                        parents AS (
+                            SELECT * FROM anchor
+                            UNION ALL
+                            SELECT
+                                c.id, c.id_parent, c.id_rank, c.basename, c.authors, c.parent
+                            FROM wfo c
+                            JOIN parents p ON p.id_parent = c.id
+                        ),
+                        hierarchical AS (
+                            SELECT * FROM children
+                            UNION 
+                            SELECT * FROM parents
+                        )
+                        SELECT a.id, a.id_parent, a.id_rank, a.basename, a.authors, a.parent, d.id_taxonref
+                            FROM hierarchical a
+                            LEFT JOIN taxonomy.taxa_reference d ON lower(a.basename) =  d.basename
+                            ORDER BY a.id_rank;
+
+                """
+
+
         query = functions.db().exec(sql_query)
         while query.next():
             item = {
                 "id": query.value("id"),
-                "id_taxonref": query.value("id_taxonref"),
-                "id_rank" : query.value("id_rank"),
                 "id_parent": query.value("id_parent"),
+                "id_rank" : query.value("id_rank"),
                 "taxaname": query.value("basename").title(),
                 "basename": query.value("basename"),
-                "parentname": query.value("parentname"),
+                "parentname": query.value("parent"),
                 "authors": query.value("authors"),
                 "rank": functions.dbtaxa().db_get_rank(query.value("id_rank"), "rank_name"),
                 "published" : True,
                 "accepted" : True,
-                "autonym" : False
+                "autonym" : False,
+                "id_taxonref": query.value("id_taxonref")
             }
             table_taxa.append(item)
         return table_taxa
 
-    def db_get_json_taxa(self, grouped_idrank, dict_filter = None):
+    def db_get_json_taxa(self, grouped_idrank, dict_filter = None, refresh = False):
         """
             return a list of dictionnaries (dict_taxa) with taxaname infos from the database as
                 [{"id_taxonref":integer, "id_parent":integer, "id_rank" :integer, "taxaname":text, "authors":text, "published":boolean, "accepted":boolean, 
                 "taxaname_score":numeric, "authors_score":numeric"}, ...]
             apply a filter on the query
-                dict_filter = {"id_taxonref" : integer, "search_name": text, "clade": text[None], "properties": dictionnary, "refresh": boolean[False]}
+                dict_filter = {"id_taxonref" : integer, "search_name": text, "clade": text[None], "properties": dictionnary[{}], "refresh": boolean[False]}
                 where :
                 refresh -> only return childs of idtaxonref impacted by a name change (avoid refresh all childs of a rank but only those linked by name combination)
-                properties -> a dictionnary as in properties field (cf. list_db_properties)
+                properties -> a dictionnary as in properties field (cf. db_dic_properties)
         """
         sql_where_taxa = ''
         tab_sql = ["id_rank >= 21"]
@@ -549,8 +679,11 @@ class PN_dbTaxa:
                         tab_sql.append(_prop)
                         nb_filter += 1
             #3) set the id_taxonref
-            idtaxonref = dict_filter.get("id_taxonref", 0)
-            if idtaxonref >0:
+            idtaxonref = dict_filter.get("id_taxonref", None)
+            if idtaxonref:
+                if not isinstance(idtaxonref, list):
+                    idtaxonref = [idtaxonref]
+                idtaxonref = ",".join(map(str, idtaxonref))
                 _refresh = False #dict_filter.get("refresh", False)
                 #sql_inner_join_taxa = f"INNER JOIN taxonomy.pn_taxa_childs ({idtaxonref},True, {_refresh}) z ON z.id_taxonref = a.id_taxonref"
                 #tab_sql.append (f"a.id_taxonref IN (SELECT id_taxonref FROM taxonomy.pn_taxa_childs ({idtaxonref},True, {_refresh}))")
@@ -559,7 +692,12 @@ class PN_dbTaxa:
                                         UNION
 	                                    SELECT id_taxonref FROM taxonomy.pn_taxa_parents ({idtaxonref},False)
                                         ) z ON a.id_taxonref = z.id_taxonref"""
-                    
+                sql_inner_join_taxa = f"""INNER JOIN 
+                                        (SELECT taxonomy.pn_taxa_childs (id_taxonref,True, {refresh}) id_taxonref FROM taxonomy.taxa_reference WHERE id_taxonref IN ({idtaxonref}) 
+                                        UNION
+	                                    SELECT taxonomy.pn_taxa_parents (id_taxonref,False) id_taxonref FROM taxonomy.taxa_reference WHERE id_taxonref IN ({idtaxonref}) 
+                                        ) z ON a.id_taxonref = z.id_taxonref"""
+                                    
             #4) APG Filter: add a filter for APG clade
             clade_sql = dict_filter.get("clade", None)
             if clade_sql:
@@ -578,7 +716,7 @@ class PN_dbTaxa:
                 FROM taxonomy.taxa_wfo a
                 INNER JOIN taxonomy.taxa_reference b ON lower(a.basename) = b.basename
                 WHERE b.id_rank = 8 
-                AND a.group_taxa = '{clade_sql}'
+                AND a.major_plant_group = '{clade_sql}'
                 OR a.clade_apg = '{clade_sql}'
                 ),
             all_taxa AS            
@@ -709,12 +847,13 @@ class PN_dbTaxa:
     
     def db_get_properties (self, id_taxonref):
         """     
-        Return a json (dictionnary of sub-dictionnaries of taxa properties taxa identity + field properties (jsonb)
-        from a PNTaxa class
+        Return a json (dictionnary of sub-dictionnaries of taxa properties (jsonb)
+        from a id_taxonref
         """
         dict_db_properties = {}
         #create a copy of dict_properties with empty values
-        for _key, _value in functions.list_db_properties.copy().items():
+        db_properties = self.db_dic_properties
+        for _key, _value in db_properties.items():
             dict_db_properties[_key] = {}.fromkeys(_value,'')
         #fill the properties from the json field properties annexed to the taxa        
         try:

@@ -15,6 +15,8 @@ from models.api_taxonomy import API_Taxonomy
 ########################################
 APIkey_tropicos = "afa96b37-3c48-4c1c-8bec-c844fb2b9c92"
 ########################################
+def db_taxa():
+    return functions.dbtaxa()
 
 # Main classe to store a taxaname with some properties
 class PNTaxa(object):
@@ -46,7 +48,7 @@ class PNTaxa(object):
         
     def fill_from_dbase(self):
         """fill the class with values from the database according to the id_taxonref"""
-        dict_taxa = functions.dbtaxa().db_get_taxon(self.id_taxonref)
+        dict_taxa = db_taxa().db_get_taxon(self.id_taxonref)
         if dict_taxa is not None:
             self.taxaname = dict_taxa.get("taxaname", None)
             self.authors = dict_taxa.get("authors", None)
@@ -65,7 +67,7 @@ class PNTaxa(object):
     @property
     def rank_name (self):
         try :
-            txt_rk = functions.dbtaxa().db_get_rank(self.id_rank, 'rank_name')
+            txt_rk = db_taxa().db_get_rank(self.id_rank, 'rank_name')
         except Exception:
             txt_rk = 'Unknown'
         return txt_rk
@@ -73,7 +75,7 @@ class PNTaxa(object):
     @property
     def id_rankparent (self):
         try :
-            id_rp = functions.dbtaxa().db_get_rank(self.id_rank, 'id_rankparent')
+            id_rp = db_taxa().db_get_rank(self.id_rank, 'id_rankparent')
         except Exception:
             id_rp = None
         return id_rp
@@ -108,38 +110,46 @@ class PNTaxa(object):
         """     
         Return a json (dictionnary of sub-dictionnaries) of the set of names for a id_taxonref
         """
-        return functions.dbtaxa().db_get_names(self.idtaxonref)
+        return db_taxa().db_get_names(self.idtaxonref)
 
     @property 
     def json_metadata (self):
         """     
         Return a json (dictionnary of sub-dictionnaries) of for metadata from a id_taxonref
         """              
-        return functions.dbtaxa().db_get_metadata(self.idtaxonref)
+        return db_taxa().db_get_metadata(self.idtaxonref)
     
     @property
     def json_properties_count(self):
         """     
         Return a json (dictionnary of sub-dictionnaries) of the count of taxa properties(jsonb) from a id_taxonref = sum (json_properties) of child taxa
         """        
-        return functions.dbtaxa().db_get_properties_count(self.idtaxonref)
+        return db_taxa().db_get_properties_count(self.idtaxonref)
 
     @property
     def json_properties(self):
         """     
         Return a json (dictionnary of sub-dictionnaries of a taxon properties(jsonb) for a id_taxonref
         """
-        return functions.dbtaxa().db_get_properties(self.idtaxonref)
+        return db_taxa().db_get_properties(self.idtaxonref)
 
     @property
     def list_hierarchy(self):
         """     
         Return a json (dictionnary of sub-dictionnaries) of hierarchy (parent + childs) for a id_taxonref
         """
-        ls_hierarchy = functions.dbtaxa().db_get_list_hierarchy(self.idtaxonref, self.id_rank)
+        ls_hierarchy = db_taxa().db_get_list_hierarchy(self.idtaxonref, self.id_rank)
         return ls_hierarchy
 
+    @property
+    def valid_parents(self):
+        ls_valid_parents = db_taxa().db_get_valid_parents(self.idtaxonref)
+        return ls_valid_parents
 
+    @property
+    def valid_merges(self):
+        ls_valid_sibling = db_taxa().db_get_valid_merges(self.idtaxonref)
+        return ls_valid_sibling
 
 
 
@@ -258,7 +268,7 @@ class PN_TaxaSearch(QtWidgets.QWidget):
         self.model.clear()
         search_txt = self.lineEdit_search_taxa.text()
         #get the list of search names with score
-        ls_searchnames = functions.dbtaxa().db_get_fuzzynames(search_txt, 0.4)
+        ls_searchnames = db_taxa().db_get_fuzzynames(search_txt, 0.4)
         if ls_searchnames is None:
             return
         #set the item into the model
@@ -566,6 +576,8 @@ class PNTaxa_add(QtWidgets.QMainWindow):
         self.table_taxa = []
         self._taxaname = ''
         self.updated = False
+        self.prefix = ''
+        self.id_rank = None
         #set the ui
         self.window = load_ui_from_resources("pn_addtaxa.ui")
         self.window.trView_childs.setVisible(False)
@@ -588,7 +600,7 @@ class PNTaxa_add(QtWidgets.QMainWindow):
         #manage the combo_group
         self.window.combo_group.addItem("All names")
         self.window.combo_group.addItem(myPNTaxa.taxaname)
-        lst = functions.dbtaxa().db_get_apg4_clades()
+        lst = db_taxa().db_get_apg4_clades()
         for clade in lst:
             self.window.combo_group.addItem(clade)
         self.window.combo_group.setCurrentIndex(1)
@@ -648,6 +660,11 @@ class PNTaxa_add(QtWidgets.QMainWindow):
                     return True
             return False
     
+    # def on_rankCombo_change(self):
+    #     self.id_rank = self.window.rankComboBox.itemData(self.window.rankComboBox.currentIndex())
+    #     self.prefix = db_taxa().db_get_rank(self.id_rank, 'prefix')
+    #     self.taxaLineEdit_setdata()
+
     def taxaLineEdit_setdata(self):
         newbasename = self.window.basenameLineEdit.text()
         newauthors = self.window.authorsLineEdit.text()
@@ -663,29 +680,28 @@ class PNTaxa_add(QtWidgets.QMainWindow):
             ined = ' ined.'
         taxa =''
         try:
-            #id_rank = self.data_rank[self.window.rankComboBox.currentIndex()]
+            #_prefix = ''
             id_rank = self.window.rankComboBox.itemData(self.window.rankComboBox.currentIndex())
-
-            prefix = functions.dbtaxa().db_get_rank(id_rank, 'prefix') 
-            if len(prefix) > 0:
-                prefix = " " + prefix
-            taxa = parentname + prefix + " " + newbasename
+            _prefix = db_taxa().db_get_rank(id_rank, 'prefix') or ''
+            # if prefix:
+            #     _prefix = prefix
+            taxa = f"{parentname} {_prefix} {newbasename}"
         except Exception:
             taxa = newbasename.title()
         self._taxaname = taxa
         taxa = taxa + ' ' + newauthors + ined
         taxa = re.sub(' +', ' ', taxa.strip())
         self.window.taxaLineEdit_result.setText(taxa)
-        _apply = len(newbasename) > 3
+        _apply = id_rank < 14 or len(newbasename) >= 3
         self.window.buttonBox.button(QtWidgets.QDialogButtonBox.Apply).setEnabled(_apply)
 
 
     def rankComboBox_setdata(self):
-        rank_childs = functions.dbtaxa().db_get_rank(self.PNTaxa.id_rank, "childs") 
+        rank_childs = db_taxa().db_get_rank(self.PNTaxa.id_rank, "childs") 
         #self.data_rank = []
         index = -1
         for idrank in rank_childs:
-            rank_name = functions.dbtaxa().db_get_rank(idrank, 'rank_name')
+            rank_name = db_taxa().db_get_rank(idrank, 'rank_name')
             self.window.rankComboBox.addItem(rank_name, idrank)
             #self.data_rank.append(idrank)
             if idrank == self.PNTaxa.id_rank:
@@ -817,10 +833,9 @@ class PNTaxa_add(QtWidgets.QMainWindow):
             _filter = None
             if self.window.combo_group.currentIndex() > 0:
                 _filter = self.window.combo_group.currentText()
-            self.table_taxa = functions.dbtaxa().db_get_taxa_wfo (_filter)
-        else: #use seulf.taxonomy_api
-
-            
+            #get the list of dictionnaries (cf. db_get_taxa_wfo)
+            self.table_taxa = db_taxa().db_get_taxa_wfo (_filter)
+        else: #use self.taxonomy_api            
             _name = self.PNTaxa.simple_taxaname
             _rank = self.PNTaxa.rank_name
             #set the key (if tropicos)
@@ -832,32 +847,31 @@ class PNTaxa_add(QtWidgets.QMainWindow):
             msg = self.taxonomy_api._api_class.API_error
             #get children
             if result:
+                #result.getchildren is a list of dictionnary ex: [{"id" : '10', "taxaname" : 'Genus species', "authors" : 'Not me', "rank" : 'Species', "idparent" : '1'}] 
                 self.table_taxa = result.get_children()
             if self.table_taxa:
-                #search for all names into the dbase (return a dictionnary id_taxonref by taxaname)       
+                #add mandatories fields for display and save
+                #search for existing taxaname in the dbase (return a dictionnary id_taxonref by taxaname for existing taxaname)
                 names = [d["taxaname"].strip() for d in self.table_taxa]     
-                dict_id_taxonref = functions.dbtaxa().db_get_searchnames(names)
+                dict_id_taxonref = db_taxa().db_get_searchnames(names)
                 #add an index dictionnary to search for taxaname from id_taxonref
                 dict_parent = {item["id"]: item["taxaname"] for item in self.table_taxa}
-                #ajust the dictionnary, add special fields and construct the query
+                #ajust the dictionnary, add special fields
                 for taxa in self.table_taxa:                
                     _tabtaxa = taxa["taxaname"].split()
                     taxa["id_taxonref"] = dict_id_taxonref.get(taxa["taxaname"], 0)
                     taxa["parentname"] = dict_parent.get(taxa["id_parent"], "")
                     taxa["basename"] = _tabtaxa[-1]
                     taxa["authors"] = functions.get_str_value(taxa["authors"])
-                    taxa["id_rank"] = functions.dbtaxa().db_get_rank(taxa["rank"], "id_rank")
+                    taxa["id_rank"] = db_taxa().db_get_rank(taxa["rank"], "id_rank")
                     taxa["published"] = len (taxa["authors"]) > 0
                     taxa["accepted"] = True
                     taxa["autonym"] = False
                     if taxa["id_rank"] > 21 and len(_tabtaxa) >= 4:
                         taxa["autonym"] = (_tabtaxa[1] == taxa["basename"])
 
-        #check existing taxa and drax the treeview model
+        #check existing taxa and draw the treeview model
         if self.table_taxa:
-            # #set the id_taxonref for already existing taxa
-            # for taxa in self.table_taxa:
-            #     taxa["id_taxonref"] = dict_id_taxonref.get(taxa["taxaname"], 0)
             self.draw_list ()
             self.window.trView_childs.sortByColumn(1, Qt.AscendingOrder)
         #set an item msg if not found
@@ -891,8 +905,8 @@ class PNTaxa_add(QtWidgets.QMainWindow):
         def draw_list_recursive(taxon, parent_item=None):
             #internal recursive function to build hierarchical tree according to idparent and id
             taxaref = f'{taxon["taxaname"]} {taxon.get("authors", "")}'.strip()
-            _checkable = (taxon["id_taxonref"] == 0 and not taxon["autonym"]  )
-            item = QtGui.QStandardItem(str(taxon["rank"]))         
+            _checkable = (taxon["id_taxonref"] == 0 and not taxon.get ("autonym", False))
+            item = QtGui.QStandardItem(str(taxon["rank"]))
             item1 = QtGui.QStandardItem(taxaref.strip())       
             item.setCheckable(False)
             item.setData(None, Qt.CheckStateRole)
@@ -1068,7 +1082,7 @@ class PNTaxa_edit(QtWidgets.QMainWindow):
     def comboBox_parent_setdata(self):
         #fill the combo box with valid parents for the current taxon
         self.window.parent_comboBox.clear()
-        ls_valid_parents = functions.dbtaxa().db_get_valid_parents(self.PNTaxa.idtaxonref)
+        ls_valid_parents = self.PNTaxa.valid_parents #db_taxa().db_get_valid_parents(self.PNTaxa.idtaxonref)
         index = -1
         for key, value in ls_valid_parents.items():
             self.window.parent_comboBox.addItem (key, value)
@@ -1092,10 +1106,10 @@ class PNTaxa_edit(QtWidgets.QMainWindow):
             ined = ' ined.'        
         taxa =''
         try:
-            id_rank = self.PNTaxa.id_rank
-            if id_rank >=21:
+            #id_rank = self.PNTaxa.id_rank
+            if self.PNTaxa.id_rank >=21:
                 parentname = self.window.parent_comboBox.currentText()
-                prefix = functions.dbtaxa().db_get_rank(id_rank, 'prefix')
+                prefix = db_taxa().db_get_rank(self.PNTaxa.id_rank, 'prefix')
                 newbasename = newbasename.lower()
             taxa = " ".join(str(part) for part in [parentname, prefix, newbasename, newauthors, ined] if part)
         except Exception:
@@ -1201,7 +1215,7 @@ class PNTaxa_merge(QtWidgets.QMainWindow):
     def comboBox_taxa_setdata(self):
         #fill the combo box with valid sibling to merge for the current taxon
         self.window.comboBox_taxa.clear()
-        ls_valid_sibling = functions.dbtaxa().db_get_valid_merges(self.PNTaxa.idtaxonref)
+        ls_valid_sibling = self.PNTaxa.valid_merges #db_taxa().db_get_valid_merges(self.PNTaxa.idtaxonref)
         index = -1
         for key, value in ls_valid_sibling.items():
             self.window.comboBox_taxa.addItem (key, value)
@@ -1414,7 +1428,7 @@ class PNTaxa_TreeModel(QtCore.QAbstractItemModel):
                 self.items[i] = myPNTaxa
                 #finally change the itemData of the node_item
                 node_item.itemData = myPNTaxa
-            elif node_parent: #new item on an existingn parent
+            else: #if node_parent: #new item on an existingn parent
                 # self.beginInsertRows(
                 #     self.createIndex(node_parent.row(), 0, node_parent),
                 #     node_parent.childCount(),

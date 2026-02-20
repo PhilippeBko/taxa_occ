@@ -25,6 +25,10 @@
   <file>ui/pn_movetaxa.ui</file>
   <file>ui/pn_editname.ui</file>
   
+  <file>sql/create_schema_taxonomy.sql</file>
+  <file>sql/config_schema_taxonomy.sql</file>
+
+  
  </qresource>
 </RCC>
 
