@@ -8,7 +8,7 @@ icons/
 _icons.qrc
 pn_import.ui
 config.db
-
+dist/
 test.py
 test_gdal.py
 api_endemia.py
