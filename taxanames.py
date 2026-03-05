@@ -23,7 +23,7 @@ from models.taxa_model import (
     PNTaxa_QTreeView, PNTaxa_add, PNTaxa_edit, PNTaxa_merge,
     PNSynonym, PNSynonym_edit
 )
-from core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox
+from core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox, ConfigManager
 from core.database import DatabaseConnection, PN_dbTaxa
 
 #generic function to access to the dbases classes
@@ -374,7 +374,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def set_theme_text(self, text: str):
        #set the text of the button themes
-       self.window.button_themes.setText(text)
+       self.window.button_themes.setText(text or "Default Style")
     
     def set_rankgroup_text(self, text: str):
        #set the text of the button rank_group
@@ -421,6 +421,8 @@ class MainWindowController:
         self.db_properties = None
         self.view.set_filter_visible(False)
         self.authors_delegate = MetadataDelegateWithAuthorCheck()
+        config_file = functions.resource_path("config.ini")
+        self.config_manager = ConfigManager(config_file)
 
         #load widgets from the view
         self.trview_taxonref = view.trview_taxonref
@@ -440,7 +442,6 @@ class MainWindowController:
         self.trview_names = PN_JsonQTreeView ()
         layout = self.window.toolBox.widget(0).layout()
         layout.insertWidget(0,self.trview_names)
-
 
         self.trview_filter = PN_JsonQTreeView ()
         layout = self.window.frame_filter.layout()
@@ -539,28 +540,32 @@ class MainWindowController:
     def on_rankGroup_selected(self, rank):
         #clic on a rankGroup Menu item
         self.view.set_rankgroup_text(rank)
-        self.trview_taxonref_setData()        
+        self.trview_taxonref_setData()
+
+    def on_menu_theme_click(self, item):
+    #to change the theme        
+        try:
+            qss_file = functions.resource_path("ui", item + ".qss")
+            with open(qss_file, "r", encoding="utf-8") as f:
+                app.setStyleSheet(f.read())
+            # save the theme in the config.ini via ConfigManager
+            self.config_manager.theme = item
+        except Exception as e:
+            if item:
+                msg = f"Unable to load the style: {item}"
+                MessageBox().critical_msgbox("Error", msg)
+            item = None
+        #set the theme to the theme button
+        self.view.set_theme_text(item)        
 
     def on_status_clicked(self):
-        dlg = PostgresConfigDialog("config.ini", self.window)
+    #load the database dialogBox to change database parameters
+        dlg = PostgresConfigDialog(self.config_manager, self.window)
+        #dlg = PostgresConfigDialog("config.ini", self.window)
         result = dlg.exec_()
         if not result:
             return
         self.load_database()
-
-    def on_menu_theme_click(self, item):
-        #change the theme
-        self.view.set_theme_text(item)
-        try:
-            qss_file = functions.resource_path("ui", item + ".qss")
-            with open(qss_file, "r") as f:
-                app.setStyleSheet(f.read())
-        except Exception as e:
-            msg = f"Unable to load the style: {e}"
-            MessageBox().critical_msgbox("Error", msg)
-
-
-
 
     def load_database(self):
         #set the ui disabled
@@ -569,18 +574,17 @@ class MainWindowController:
         self.combo_taxa_signal_connected(False)
         self.combo_taxa.clear()
         self.combo_taxa.addItem('All names')
-        self.combo_taxa.setItemData(0, PNTaxa(0, 'All names', '', 0), role=QtCore.Qt.UserRole)    
-
-        #load the connection, load dialog box if not connected
+        self.combo_taxa.setItemData(0, PNTaxa(0, 'All names', '', 0), role=QtCore.Qt.UserRole) 
+    #load the connection, load dialog box if not connected
+        dbconn = DatabaseConnection()
         while True:
-            config_file = functions.resource_path("config.ini")
-            ok = PostgresConfigDialog.ensure_config(config_file, self)
-            dbconn = DatabaseConnection()
-            if ok:
-                self.connected = dbconn.open_from_config(config_file)
+            pg = self.config_manager.postgresql
+            if pg:
+                self.connected = dbconn.open(pg)                
                 if self.connected:
                     break
-            dlg = PostgresConfigDialog(config_file, self.window)
+            #dlg = PostgresConfigDialog(config_file, self.window)
+            dlg = PostgresConfigDialog(self.config_manager, self.window)
             result = dlg.exec_()
             if not result:
                 break
@@ -630,7 +634,7 @@ class MainWindowController:
 
     def get_list_PNTaxa(self, _idtaxonref = None, refresh = False):
     #return a list of PNTaxal objets fill from the database according to a dict_filter
-        # dict_filter = {"id_taxonref" : idtaxonref, 
+        # ex: dict_filter = {"id_taxonref" : idtaxonref, 
         #             "search_name": self.view.search_taxon, 
         #             "clade": clade_sql, 
         #             "properties": self.trview_filter.dict_user_properties()
@@ -671,7 +675,7 @@ class MainWindowController:
             item.taxaname_score = rec.get("taxaname_score", None)
             item.authors_score = rec.get("authors_score", None)
             data.append(item)
-                #set the filter button color
+        #set the filter button color
         nb_filter = dict_filter.get("nb_filter", None)
         self.view.button_showFilter.setStyleSheet(
                 "color: rgb(0, 55, 217);" if nb_filter else ""
@@ -689,6 +693,7 @@ class MainWindowController:
     
    
     def database_save_taxa(self, ls_dict_tosave):
+        #internal function for saving one taxon in the database
         """ 
             common function for update (add_name and edit_name) when apply
             Save a taxon in the database from a list of dictionnaries:   
@@ -697,11 +702,7 @@ class MainWindowController:
             if idparent is present, it will update the taxon with the id_parent (integer)
                 dict_tosave = {"id_taxonref":integer, "basename":text, "authors":text, "id_parent":integer, "published":boolean, "accepted":boolean, "id_rank" :integer}
         """
-
-        #internal function for saving one taxon in the database
-
-
-#####main part of the function
+        #####main part of the function
         if not isinstance(ls_dict_tosave, list):
             ls_dict_tosave = [ls_dict_tosave]
         ls_item_updated = []
@@ -1458,7 +1459,7 @@ class MainWindowController:
         self.window.close()
 
     def show(self):
-        self.on_menu_theme_click ("Diffnes")
+        self.on_menu_theme_click (self.config_manager.theme)
         self.window.show()
         self.load_database()
 

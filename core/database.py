@@ -12,52 +12,54 @@ class DatabaseConnection:
     def __init__(self):
         self.db = None
 
-    def open_from_config(self, config_path):
-        import configparser
-        config = configparser.ConfigParser()
-        read_files = config.read(config_path)
-        if not read_files:
-            print(f"Warning, unable to read the config file : {config_path}")
-            return False    
+    # def open_from_config(self, config_path):
+    #     import configparser
+    #     config = configparser.ConfigParser()
+    #     read_files = config.read(config_path)
+    #     if not read_files:
+    #         print(f"Warning, unable to read the config file : {config_path}")
+    #         return False    
 
-        section = 'postgresql'
-        if section not in config.sections():
-            print(f"Warning, section [{section}] not found in config file : {config_path}")
-            return False
+    #     section = 'postgresql'
+    #     if section not in config.sections():
+    #         print(f"Warning, section [{section}] not found in config file : {config_path}")
+    #         return False
         
-        connected = self.open(config['postgresql']['host'], 
-                            config['postgresql']['user'], 
-                            config['postgresql']['password'], 
-                            config['postgresql']['database'])
-        if connected:
-            return self.check_schema_and_tables()
-        return False 
+    #     connected = self.open(config['postgresql']['host'], 
+    #                         config['postgresql']['user'], 
+    #                         config['postgresql']['password'], 
+    #                         config['postgresql']['database'])
+    #     if connected:
+    #         return self.check_schema_and_tables()
+    #     return False 
 
 
 
-    def open(self, host, user, password, database, port = 5432):
+    def open(self, pg_connexion):
         if self.db:
             if self.db.isValid():
                 self.db.close()
                 del self.db
             #QtSql.QSqlDatabase.removeDatabase(conn_name)
-        
+        port = int(pg_connexion.get("port", 5432))
         conn_name = "x-nomen" +str(uuid.uuid4())
         self.db = QtSql.QSqlDatabase.addDatabase("QPSQL", conn_name)
         self.db.setPort(port)
-        self.db.setHostName(host)
-        self.db.setUserName(user)
-        self.db.setPassword(password)
-        self.db.setDatabaseName(database)
+        self.db.setHostName(pg_connexion["host"])
+        self.db.setUserName(pg_connexion["user"])
+        self.db.setPassword(pg_connexion["password"])
+        self.db.setDatabaseName(pg_connexion["database"])
         if self.db.open():
             return True
         else:
             self.db = None
             return False
+        
     def close(self):
         if self.db:
             self.db.close()
             self.db = None
+
     def exec(self, sql):
         return self.db.exec(sql)
 
@@ -76,6 +78,7 @@ class DatabaseConnection:
         return '\n'.join(tab_text[:3])
 
     def check_schema_and_tables(self):
+        #check if schema 'taxonomy' is available on the database
         dbschema = 'taxonomy'
         dbtables = ['taxa_reference', 'taxa_rank', 'taxa_nameset', 'taxa_wfo']
         sql_query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{dbschema}'"
