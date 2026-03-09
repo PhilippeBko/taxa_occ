@@ -1,33 +1,28 @@
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "taxa-occ"
+name = "taxa_occ"
 version = "0.1.0"
-description = "Application PyQt5 pour gestion de Taxa"
-authors = [{name="Ton Nom"}]
-
-# Dépendances principales pour les utilisateurs finaux
+description = "Mon application de taxonomie"
 dependencies = [
+    "beautifulsoup4==4.14.3",
+    "certifi==2026.1.4",
+    "charset-normalizer==3.4.4",
+    "idna==3.11",
     "PyQt5==5.15.11",
     "PyQt5-Qt5==5.15.18",
     "PyQt5_sip==12.18.0",
     "requests==2.32.5",
-    "beautifulsoup4==4.14.3",
     "soupsieve==2.8.2",
-    "certifi==2026.1.4",
-    "charset-normalizer==3.4.4",
-    "idna==3.11",
-    "urllib3==2.6.3",
     "typing_extensions==4.15.0",
-    "psycopg2-binary"  # PostgreSQL Python client
+    "urllib3==2.6.3",
 ]
 
-# Packages à inclure dans la distribution
-[tool.setuptools]
-packages = ["taxaname","core", "models"]
-
-# Crée la commande CLI `taxanames`
 [project.scripts]
-taxanames = "taxanames:main"
+# Quand on tape 'taxanames' dans le terminal, cela lance main() dans taxanames.py
+taxanames = "taxa_occ.taxanames:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

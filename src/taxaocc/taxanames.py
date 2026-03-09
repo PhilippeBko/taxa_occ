@@ -14,10 +14,13 @@ import time
 
 # Third-party
 from PyQt5 import QtCore, QtGui, QtWidgets
-import core.ressources as ressources  # noqa: F401
+#print("Répertoire de travail actuel :", os.getcwd())
+from core import ressources  # noqa: F401
+#import taxa_occ.core.ressources
 
 # Internal modules
 from core import functions
+
 from models.taxa_model import (
     PNTaxa_searchAPI, PNTaxa_TreeModel, PNTaxa, PNTaxa_with_Score, 
     PNTaxa_QTreeView, PNTaxa_add, PNTaxa_edit, PNTaxa_merge,
