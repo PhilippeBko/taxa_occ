@@ -1,46 +1,39 @@
 import json
 import re
-import subprocess
+import uuid
+
 from PyQt5 import  QtSql
 from PyQt5.QtCore import QFile, QTextStream
 
 from core import functions
-import uuid
 
 
 class DatabaseConnection:
+    """
+    A class for managing connections to a PostgreSQL database.
+
+    Attributes:
+        db (QSqlDatabase): The database connection object.
+
+    Methods:
+        __init__(): Initializes an instance of the class with a `None` value for `db`.
+        open(pg_connexion): Opens a connection to a PostgreSQL database using the provided `pg_connexion` dictionary.
+        close(): Closes the current database connection if it's open.
+        exec(sql): Executes the provided SQL query and returns the result.
+        last_error(): Returns the last error that occurred in the database connection.
+        dbname(): Returns the name of the current database if it's open, otherwise `None`.
+        postgres_error(): Converts the last error in the database connection into a text string.
+        check_schema_and_tables(): Checks if the 'taxonomy' schema and specific tables exist in the database. If not, it executes SQL scripts to create them.
+    """
     def __init__(self):
         self.db = None
 
-    # def open_from_config(self, config_path):
-    #     import configparser
-    #     config = configparser.ConfigParser()
-    #     read_files = config.read(config_path)
-    #     if not read_files:
-    #         print(f"Warning, unable to read the config file : {config_path}")
-    #         return False    
-
-    #     section = 'postgresql'
-    #     if section not in config.sections():
-    #         print(f"Warning, section [{section}] not found in config file : {config_path}")
-    #         return False
-        
-    #     connected = self.open(config['postgresql']['host'], 
-    #                         config['postgresql']['user'], 
-    #                         config['postgresql']['password'], 
-    #                         config['postgresql']['database'])
-    #     if connected:
-    #         return self.check_schema_and_tables()
-    #     return False 
-
-
-
     def open(self, pg_connexion):
+        #pg_connexion = {"host": host, "user": user, "password": password, "database": database, "port": port}
         if self.db:
             if self.db.isValid():
                 self.db.close()
                 del self.db
-            #QtSql.QSqlDatabase.removeDatabase(conn_name)
         port = int(pg_connexion.get("port", 5432))
         conn_name = "x-nomen" +str(uuid.uuid4())
         self.db = QtSql.QSqlDatabase.addDatabase("QPSQL", conn_name)
@@ -50,7 +43,7 @@ class DatabaseConnection:
         self.db.setPassword(pg_connexion["password"])
         self.db.setDatabaseName(pg_connexion["database"])
         if self.db.open():
-            return True
+            return self.check_schema_and_tables()
         else:
             self.db = None
             return False
@@ -58,30 +51,37 @@ class DatabaseConnection:
     def close(self):
         if self.db:
             self.db.close()
+            del self.db
             self.db = None
 
     def exec(self, sql):
-        return self.db.exec(sql)
+        if self.db:
+            return self.db.exec(sql)
 
     def last_error(self):
-        return self.db.lastError()
+        if self.db:
+            return self.db.lastError()
 
     def dbname(self):
         if self.db:
             return self.db.databaseName()
-        return None
     
     def postgres_error(self):
         #convert the postgresl error in a text
         error = self.last_error()
-        tab_text = error.text().split("\n")
-        return '\n'.join(tab_text[:3])
+        if error:
+            tab_text = error.text().split("\n")
+            return '\n'.join(tab_text[:3])
 
     def check_schema_and_tables(self):
+        #block notice & infos msgs
+        query = self.db.exec("SET client_min_messages = WARNING;")
+        query.finish()
+
         #check if schema 'taxonomy' is available on the database
         dbschema = 'taxonomy'
         dbtables = ['taxa_reference', 'taxa_rank', 'taxa_nameset', 'taxa_wfo']
-        sql_query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{dbschema}'"
+        sql_query = f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{dbschema}';"
         query = self.db.exec(sql_query)
         tables_list = []
         while query.next():
@@ -94,7 +94,7 @@ class DatabaseConnection:
             print ("Error : Schema and/or tables are not present")
             #return False
 
-#     # Schema absent → exécuter les scripts
+    # Schema is not present, execute sql scripts to create tables, indexes, functions, triggers
             scripts = ['create_schema_taxonomy.sql','config_schema_taxonomy.sql']
             for script_path in scripts:
                 file = QFile(f":/sql/{script_path}")
@@ -104,21 +104,18 @@ class DatabaseConnection:
                 stream.setCodec("UTF-8")
                 sql = stream.readAll()
                 self.exec(sql)
-                #print (self.postgres_error)
-                # file.close()
-                # try:
-                #     # 
-                #     subprocess.run(cmd, capture_output=True, text=True, check=True)
-                #     #print(result.stdout)
-                # except subprocess.CalledProcessError as e:
-                #     print (f"Error in execution {script_path} : {e.stderr}")
-                #     return False
             return True
-#     
+
+
 
 
     
 class PN_dbTaxa:
+    """ 
+        class to manage taxa database(taxonomy schema)
+        methods and properties focused on taxa managements
+        connexion with a DatabaseConnection (composition)
+    """
 #a subClass to manage the database of taxa (taxonomy schema), connexion with a DatabaseConnection (composition)
     def __init__(self, db: DatabaseConnection):
         self.db = db
@@ -128,6 +125,7 @@ class PN_dbTaxa:
 #############################
     @property
     def db_dic_properties(self):
+        #a dictionnary to describe the properties of a taxon
         return {
             "leaf" : {"type": {"type": "text", "items": ['Simple', 'Compound', 'Phyllode']}, 
                     "phyllotaxy": {"type": "text", "items": ['Alternate', 'Opposite', 'Verticillate']}, 
@@ -159,10 +157,10 @@ class PN_dbTaxa:
                             "zoochorie": {"type": 'boolean'}
                     },
             "new caledonia": {"status": {"type": 'text', "items": ['Endemic','Autochtonous','Introduced']}
+                    }
             }
-}
     def field_dbase(self, fieldname, id_taxonref):
-        """get a field value from the taxonomy.taxa_reference according to a id_taxonref"""
+        #get a value from the taxonomy.taxa_reference according to a id_taxonref and a fieldname
         sql_query = f"""
                     SELECT 
                         {fieldname} 
@@ -176,7 +174,6 @@ class PN_dbTaxa:
         value = None
         if query.next():
             value = query.value(fieldname)
-
         query.finish()
         del query
         return value
@@ -184,6 +181,8 @@ class PN_dbTaxa:
     def db_execute_sql(self, sql_query, error_msg = True):
         #execute a sql query and return True or False if error
         result = self.db.exec(sql_query)
+        # if error_msg:
+
         return not result.lastError().isValid()
     
     def db_add_synonym(self, id_taxonref, synonym, category = 'Orthographic', error_msg = False):
@@ -432,7 +431,7 @@ class PN_dbTaxa:
     
     def db_get_names(self, id_taxonref):
         """return a dictionnary of list of all the names linked to a id_taxonref and organized by categories
-            #ex: {'Autonyms': ['Amborella trichopoda Baill.', 'Amborella trichopoda'], 'Nomenclatural': ['Platyspermation crassifolium', 'Platyspermation crassifolium Guillaumin']}
+            #ex: {'Autonyms': ['Amborella trichopoda Baill.', 'Amborella trichopoda'], 'Homotypic': ['Platyspermation crassifolium', 'Platyspermation crassifolium Guillaumin']}
         """
         sql_query = f"""
                     SELECT 
@@ -923,9 +922,6 @@ class PN_dbTaxa:
         query.finish()        
         del query
         return json_props
-
-
-
     
     def db_get_metadata (self, id_taxonref):
         #load metadata json from database
@@ -952,10 +948,6 @@ class PN_dbTaxa:
             json_data[key] = _fields
         return json_data
 
-
-    
-
-    
     def db_delete_reference(self, id_taxonref):
         #delete a reference in the taxonomy.taxa_reference table
         # #return the list of id_taxonref deleted (including childs) or []

@@ -82,17 +82,32 @@
        </item>
        <item>
         <property name="text">
-         <string>Common</string>
+         <string>Vernacular</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>Nomenclatural</string>
+         <string>Homotypic</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>Taxinomic</string>
+         <string>Heterotypic</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Basionym</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Informal</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Misapplied</string>
         </property>
        </item>
       </widget>

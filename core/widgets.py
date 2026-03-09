@@ -1,24 +1,13 @@
 # Standard library
-# import json
-# import os
-# import re
-# import subprocess
 import webbrowser
+import os
+import configparser
 
 # Third-party
 from PyQt5 import QtGui, QtWidgets, uic
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent, QFile
-
-import os
-import configparser
-
-#from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtSql import QSqlDatabase
 
-
-
-# Internal
-#from core import functions, icons_rc
 
 
 def load_ui_from_resources(ui_name):
@@ -253,7 +242,7 @@ class PN_DatabaseStatusWidget(QtWidgets.QWidget):
         if event.type() == QEvent.MouseButtonPress:
             if event.button() == Qt.LeftButton:
                 self.clicked.emit()
-                return True   # on consomme l'événement
+                return True   # use the event
 
         return super().eventFilter(obj, event)
 
@@ -284,7 +273,7 @@ class MessageBox(QtWidgets.QMessageBox):
         )
 
 
-        # Icône centrale
+        # central icon
         main_icons = {
             QtWidgets.QMessageBox.Icon.Information: QtGui.QIcon(":/icons/info.png"),
             QtWidgets.QMessageBox.Icon.Warning: QtGui.QIcon(":/icons/warning.png"),
@@ -297,10 +286,10 @@ class MessageBox(QtWidgets.QMessageBox):
         else:
             msg.setIcon(icon)
 
-        # Boutons
+        # Buttons
         msg.setStandardButtons(buttons)
 
-        # Icônes des boutons
+        # Buttons icons
         button_icons = {
             QtWidgets.QMessageBox.StandardButton.Ok: QtGui.QIcon(":/icons/ok.png"),
             QtWidgets.QMessageBox.StandardButton.Cancel: QtGui.QIcon(":/icons/cancel.png"),
@@ -337,7 +326,10 @@ class MessageBox(QtWidgets.QMessageBox):
 
 
 class ConfigManager:
-    def __init__(self, config_path="config.ini"):
+    """
+    The main class to manage the config parameters into the config_path with configparser
+    """
+    def __init__(self, config_path: str):
         self.config_path = config_path
         self.config = configparser.ConfigParser()
         self.load()
@@ -393,6 +385,9 @@ class ConfigManager:
 
 
 class PostgresConfigDialog(QtWidgets.QDialog):
+    """
+        A Qt Dialog to configure and test the PostgreSQL connection
+    """
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
         self.setWindowTitle("PostgreSQL configuration")
@@ -451,14 +446,13 @@ class PostgresConfigDialog(QtWidgets.QDialog):
 
     # --------------------------------------------------
     def load_existing_config(self):
-        """Charge les valeurs depuis ConfigManager"""
+        """load value from ConfigManager"""
         pg = self.config_manager.postgresql
         self.ed_host.setText(pg.get("host", ""))
         self.ed_user.setText(pg.get("user", ""))
         self.ed_password.setText(pg.get("password", ""))
         self.ed_database.setText(pg.get("database", ""))
-        self.ed_port.setText(pg.get("port", "5432"))
-
+        self.ed_port.setText(str(pg.get("port", "5432")))
 
     # --------------------------------------------------
     def test_connection(self):
@@ -535,220 +529,6 @@ class PostgresConfigDialog(QtWidgets.QDialog):
         }
 
         self.accept()
-
-    # # --------------------------------------------------
-    # @staticmethod
-    # def ensure_config(config_manager, parent=None):
-    #     """
-    #     Return True if config PostgreSQL is valid, False in any other cases
-    #     """
-    #     pg = config_manager.postgresql
-    #     required_keys = ["host", "user", "database"]
-    #     return all(pg.get(k) for k in required_keys)
-
-
-
-# class PostgresConfigDialog_old(QtWidgets.QDialog):
-#     def __init__(self, config_path="config.ini", parent=None):
-#         super().__init__(parent)
-
-#         self.setWindowTitle("PostgreSQL configuration")
-#         self.setModal(True)
-#         self.config_path = config_path
-#         self.validated = False
-
-#         # --- UI ---
-#         layout = QtWidgets.QVBoxLayout(self)
-#         form = QtWidgets.QGridLayout()
-
-#         self.ed_host = QtWidgets.QLineEdit()
-#         self.ed_user = QtWidgets.QLineEdit()
-#         self.ed_password = QtWidgets.QLineEdit()
-#         self.ed_password.setEchoMode(QtWidgets.QLineEdit.Password)
-#         self.ed_database = QtWidgets.QLineEdit()
-
-#         form.addWidget(QtWidgets.QLabel("Host"), 0, 0)
-#         form.addWidget(self.ed_host, 0, 1)
-
-#         form.addWidget(QtWidgets.QLabel("User"), 1, 0)
-#         form.addWidget(self.ed_user, 1, 1)
-
-#         form.addWidget(QtWidgets.QLabel("Password"), 2, 0)
-#         form.addWidget(self.ed_password, 2, 1)
-
-#         form.addWidget(QtWidgets.QLabel("Database"), 3, 0)
-#         form.addWidget(self.ed_database, 3, 1)
-
-#         layout.addLayout(form)
-
-#         # --- Buttons ---
-#         btn_layout = QtWidgets.QHBoxLayout()
-
-#         self.btn_test = QtWidgets.QPushButton("Test")
-#         self.btn_ok = QtWidgets.QPushButton("OK")
-#         self.btn_cancel = QtWidgets.QPushButton("Close")
-#         self.btn_ok.setIcon(QtGui.QIcon(":/icons/ok.png"))
-#         self.btn_cancel.setIcon(QtGui.QIcon(":/icons/nok.png"))
-#         self.btn_test.setIcon(QtGui.QIcon(":/icons/test.png"))
-
-#         self.btn_ok.setEnabled(False)
-
-#         btn_layout.addStretch()
-#         btn_layout.addWidget(self.btn_test)
-#         btn_layout.addWidget(self.btn_ok)
-#         btn_layout.addWidget(self.btn_cancel)
-
-#         layout.addLayout(btn_layout)
-
-#         # --- Signals ---
-#         self.btn_test.clicked.connect(self.test_connection)
-#         self.btn_ok.clicked.connect(self.accept_and_save)
-#         self.btn_cancel.clicked.connect(self.reject)
-#         self.adjustSize()
-#         self.setFixedSize(400, self.height())
-#         # preload if exists
-#         self.load_existing_config()
-
-#     # --------------------------------------------------
-
-#     def load_existing_config(self):
-#         """Load existing values if file exists and section present."""
-#         if not os.path.exists(self.config_path):
-#             return
-
-#         config = configparser.ConfigParser()
-#         config.read(self.config_path)
-
-#         if "postgresql" not in config:
-#             return
-
-#         pg = config["postgresql"]
-
-#         self.ed_host.setText(pg.get("host", ""))
-#         self.ed_user.setText(pg.get("user", ""))
-#         self.ed_password.setText(pg.get("password", ""))
-#         self.ed_database.setText(pg.get("database", ""))
-
-#     # --------------------------------------------------
-
-#     def test_connection(self):
-#         host = self.ed_host.text().strip()
-#         user = self.ed_user.text().strip()
-#         password = self.ed_password.text()
-#         database = self.ed_database.text().strip()
-
-#         if not all([host, user, database]):
-#             QtWidgets.QMessageBox.warning(
-#                 self,
-#                 "Missing fields",
-#                 "Host, user and database are required."
-#             )
-#             return
-
-#         # create temporary connection
-#         conn_name = "test_connection"
-
-#         db = QSqlDatabase.database(conn_name, open=False)
-#         if db.isValid():
-#             db.close()
-#             del db
-#             QSqlDatabase.removeDatabase(conn_name)
-
-#         db = QSqlDatabase.addDatabase("QPSQL", conn_name)
-#         db.setHostName(host)
-#         db.setUserName(user)
-#         db.setPassword(password)
-#         db.setDatabaseName(database)
-
-#         if not db.open():
-#             QtWidgets.QMessageBox.critical(
-#                 self,
-#                 "Connection failed",
-#                 db.lastError().text()
-#             )
-#             self.btn_ok.setEnabled(False)
-#             return
-
-#         db.close()
-#         # if QSqlDatabase.contains(conn_name):
-#         #     QSqlDatabase.removeDatabase(conn_name)
-
-#         QtWidgets.QMessageBox.information(
-#             self,
-#             "Connection OK",
-#             "Connection successful."
-#         )
-
-#         self.validated = True
-#         self.btn_ok.setEnabled(True)
-
-#     # --------------------------------------------------
-
-#     def accept_and_save(self):
-#         if not self.validated:
-#             QtWidgets.QMessageBox.warning(
-#                 self,
-#                 "Not validated",
-#                 "Please test the connection before saving."
-#             )
-#             return
-
-#         config = configparser.ConfigParser()
-
-
-#         if os.path.exists(self.config_path):
-#             config.read(self.config_path)
-        
-#         if "postgresql" not in config:
-#             config["postgresql"] = {}
-
-
-#         config["postgresql"] = {
-#             "host": self.ed_host.text().strip(),
-#             "user": self.ed_user.text().strip(),
-#             "password": self.ed_password.text(),
-#             "database": self.ed_database.text().strip()
-#         }
-
-#         try:
-#             with open(self.config_path, "w") as f:
-#                 config.write(f)
-#         except Exception as e:
-#             QtWidgets.QMessageBox.critical(
-#                 self,
-#                 "Write error",
-#                 f"Cannot write config file:\n{e}"
-#             )
-#             return
-
-#         self.accept()
-
-#     # --------------------------------------------------
-
-#     @staticmethod
-#     def ensure_config(config_path="config.ini", parent=None):
-#         """
-#         Returns True if a valid config exists or was created successfully.
-#         Returns False if user cancelled.
-#         """
-#         config = configparser.ConfigParser()
-
-#         if os.path.exists(config_path):
-#             config.read(config_path)
-
-#             if "postgresql" in config:
-#                 pg = config["postgresql"]
-#                 keys = {"host", "user", "password", "database"}
-
-#                 if keys.issubset(pg.keys()):
-#                     return True
-#         return False
-#         # # config missing or invalid → open dialog
-#         # dlg = PostgresConfigDialog(config_path, parent)
-#         # result = dlg.exec_()
-
-#         # return result == QtWidgets.QDialog.Accepted
-
 
 
 

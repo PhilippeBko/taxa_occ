@@ -162,23 +162,20 @@ class MetadataDelegateWithAuthorCheck(LinkDelegate):
                     self.drawButton(painter, option, index)
 
     def drawButton(self, painter, option, index):
+    # create a button for edition
         r = option.rect
         rect = QtCore.QRect(r.right() - 22, r.top(), 20, r.height())
         self._button_rects[index] = rect
 
-        # 👉 créer une option "comme un item"
+        # create a button for edition
         opt = QtWidgets.QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-
-        # texte à afficher
+        self.initStyleOption(opt, index)        
         opt.text = "⋮"
         opt.rect = rect
         opt.displayAlignment = QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
 
-        # pas d’icône / pas de déco
+        # no icon, no decoration, only two points
         opt.features &= ~QtWidgets.QStyleOptionViewItem.HasDecoration
-
-        # 👉 laisser QT peindre le texte selon le QSS
         option.widget.style().drawControl(
             QtWidgets.QStyle.CE_ItemViewItem,
             opt,
@@ -187,6 +184,7 @@ class MetadataDelegateWithAuthorCheck(LinkDelegate):
         )
 
     def editorEvent(self, event, model, option, index):
+    #manage the mouse clic to produce an event
         if event.type() == QtCore.QEvent.MouseButtonPress:
             rect = self._button_rects.get(index)
             if rect and rect.contains(event.pos()):
@@ -196,6 +194,7 @@ class MetadataDelegateWithAuthorCheck(LinkDelegate):
         return super().editorEvent(event, model, option, index)
 
     def _triggerClipboard(self, action_text):
+    #copy option into the clipboard
         index = self._current_index
         if index is None:
             return
@@ -211,14 +210,14 @@ class MetadataDelegateWithAuthorCheck(LinkDelegate):
 class TaxonomyProxyModel(QtCore.QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
-        # --- Filter Variables (must correspond to self.show_nodes_...)
+        # --- Filter parameters
         self.show_checked_mode = 1  # 1: All, 2: True, 3: False
         self.show_published_mode = 1
         self.show_accepted_mode = 1
         self.children_only = False
 
-    # --- Helper method for match logic (reused from your code) ---
     def match_filter(self, mode, value):
+    # Method for match logic
         if mode == 1:
             return True
         if mode == 2:
@@ -226,14 +225,13 @@ class TaxonomyProxyModel(QtCore.QSortFilterProxyModel):
         return not bool(value)
     
     def childCount(self):
-    #retourne the number of visible child nodes in the proxy model
+    # the number of visible child nodes in the proxy model (populated root nodes)
         total_child_count = 0
         for row in range(self.rowCount()):
             root_index = self.index(row, 0, QtCore.QModelIndex())
             if root_index.isValid():
                 total_child_count += self.rowCount(root_index)
         return total_child_count
-
     
     def nodeMatchesFilters(self, node):
     #return true/false according to the filters
@@ -250,7 +248,6 @@ class TaxonomyProxyModel(QtCore.QSortFilterProxyModel):
             return False        
         node = index.data(QtCore.Qt.UserRole)
         if index.parent().isValid():
-            #return all(self.match_filter(mode, value) for mode, value in filters)
             return self.nodeMatchesFilters (node)
         # if not children_only root node is visible
         if not self.children_only:
@@ -272,10 +269,13 @@ class TaxonomyProxyModel(QtCore.QSortFilterProxyModel):
 
 ##The MainWindow load the ui interface to navigate and edit taxaname###
 class MainWindow(QtWidgets.QMainWindow):
-    # rank_selected = QtCore.pyqtSignal(str)
-    # theme_selected = QtCore.pyqtSignal(str)
+    """
+    The main window of the application.
+    This class represents the main window of the application and is responsible for managing the user interface.
+    It inherits from `QtWidgets.QMainWindow` and provides methods to interact with the UI elements.
+    """
+
     toolbox_click = QtCore.pyqtSignal(int)
-    
     def __init__(self):
         super().__init__()
         # load the GUI
@@ -287,6 +287,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.buttonbox_filter = self.window.buttonBox_filter
         self.buttonbox_filter_apply = self.window.buttonBox_filter.button(QtWidgets.QDialogButtonBox.Apply)
         self.buttonbox_filter_reset = self.window.buttonBox_filter.button(QtWidgets.QDialogButtonBox.Reset)
+
         self.button_properties = self.window.buttonBox_identity
         self.button_properties_apply = self.button_properties.button(QtWidgets.QDialogButtonBox.Apply)
         self.button_properties_cancel = self.button_properties.button(QtWidgets.QDialogButtonBox.Cancel)
@@ -413,6 +414,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.button_rankgroup.setText(text) 
 
 class MainWindowController:
+    """
+        The controller class of the MainWindow class
+        Initializes the MainWindowController object given a view object.
+        It sets the view, window, connected status, db properties, authors delegate,
+        config manager, and loads widgets from and to the view.
+        It sets the filtering and sorting on the proxy model for trview_taxonref,
+        creates the metadata worker (Qthread) and sets the slots signals.
+    """    
 #the main controller of the application
     def __init__(self, view):
         self.view = view
@@ -547,7 +556,7 @@ class MainWindowController:
         try:
             qss_file = functions.resource_path("ui", item + ".qss")
             with open(qss_file, "r", encoding="utf-8") as f:
-                app.setStyleSheet(f.read())
+                QtWidgets.qApp.setStyleSheet(f.read())
             # save the theme in the config.ini via ConfigManager
             self.config_manager.theme = item
         except Exception as e:
@@ -714,9 +723,9 @@ class MainWindowController:
                 ls_item_updated.append(idtaxonref_torefresh)
                 #ensure to update the id_taxonref in the dict_tosave
                 dict_tosave["id_taxonref"] = idtaxonref_torefresh
-            # else:
-            #     msg = db_postgres().postgres_error()
-            #     MessageBox().critical_msgbox("Error", msg)
+            else:
+                msg = db_postgres().postgres_error()
+                MessageBox().critical_msgbox("Error", msg)
         
         #refresh UI if updated (tlview_taxonref and trView_hierarchy)
         #if ls_item_updated:
@@ -926,7 +935,7 @@ class MainWindowController:
                         dict_taxa = {}
                         dict_taxa["names"] = [taxa]
                     for value in dict_taxa["names"]:
-                        if db_taxa().db_add_synonym(_selecteditem.id_taxonref, value, 'Nomenclatural'):
+                        if db_taxa().db_add_synonym(_selecteditem.id_taxonref, value, 'Homotypic'):
                             new_synonyms += 1
                 #refresh the tab names for the current selecteditem if newsynonyms
                 if new_synonyms > 0 and selecteditem == _selecteditem:
@@ -1454,7 +1463,6 @@ class MainWindowController:
             _suffix = 'taxa'
         self.view.set_taxa_label(f"{selecteditem.taxonref} ({child_count} {_suffix})")
     
-
     def close(self):
         self.window.close()
 
@@ -1463,12 +1471,22 @@ class MainWindowController:
         self.window.show()
         self.load_database()
 
-
-if __name__ == "__main__":
+def main():
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
     controller = MainWindowController(window)
     controller.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
+
+# if __name__ == "__main__":
+#     app = QtWidgets.QApplication(sys.argv)
+#     window = MainWindow()
+#     controller = MainWindowController(window)
+#     controller.show()
+#     sys.exit(app.exec())
 
 

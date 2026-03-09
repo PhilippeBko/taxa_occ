@@ -1,4 +1,6 @@
 __pycache__
+ui/
+sql/
 venv/
 .vscode/
 icons/

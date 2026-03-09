@@ -1175,7 +1175,7 @@ class PNTaxa_merge(QtWidgets.QMainWindow):
         self.window = load_ui_from_resources("pn_movetaxa.ui")
         self.window.setMaximumHeight(1)
         
-        self.window.comboBox_category.addItems(['Nomenclatural', 'Taxinomic'])
+        self.window.comboBox_category.addItems(['Homotypic', 'Heterotypic'])
         self.window.comboBox_category.setCurrentIndex(0)
         self.window.comboBox_category.activated.connect(self.set_newtaxanames)
         

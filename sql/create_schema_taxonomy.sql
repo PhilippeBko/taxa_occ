@@ -1095,7 +1095,7 @@ VALUES
 	--on taxa_nameset
 	ALTER TABLE taxonomy.taxa_nameset ALTER COLUMN name SET NOT NULL;
 	ALTER TABLE taxonomy.taxa_nameset ALTER COLUMN category SET DEFAULT 5;
-	ALTER TABLE taxonomy.taxa_nameset ADD CONSTRAINT check_category CHECK (category BETWEEN 0 AND 9);
+	ALTER TABLE taxonomy.taxa_nameset ADD CONSTRAINT check_category CHECK (category BETWEEN 0 AND 15);
 	ALTER TABLE taxonomy.taxa_nameset ADD CONSTRAINT taxa_name_fk FOREIGN KEY (id_taxonref) REFERENCES taxonomy.taxa_reference(id_taxonref) ON UPDATE CASCADE ON DELETE CASCADE;
 --add sequence
 	CREATE SEQUENCE taxonomy.taxa_id_taxonref_seq OWNED BY taxonomy.taxa_reference.id_taxonref;
