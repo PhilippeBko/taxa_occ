@@ -19,15 +19,15 @@ from taxaocc.core import ressources  # noqa: F401
 #import taxa_occ.core.ressources
 
 # Internal modules
-from core import functions
+from taxaocc.core import functions
 
-from models.taxa_model import (
+from taxaocc.models.taxa_model import (
     PNTaxa_searchAPI, PNTaxa_TreeModel, PNTaxa, PNTaxa_with_Score, 
     PNTaxa_QTreeView, PNTaxa_add, PNTaxa_edit, PNTaxa_merge,
     PNSynonym, PNSynonym_edit
 )
-from core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox, ConfigManager
-from core.database import DatabaseConnection, PN_dbTaxa
+from taxaocc.core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox, ConfigManager
+from taxaocc.core.database import DatabaseConnection, PN_dbTaxa
 
 #generic function to access to the dbases classes
 #access to the postgresql connexion
