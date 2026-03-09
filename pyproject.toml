@@ -1,3 +1,11 @@
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+# Ceci dit à pip de copier tous les fichiers .qss et .ini dans le package taxaocc
+"taxaocc" = ["*.qss", "*.ini", "ui/*.qss", "core/*.ini"]
+
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
