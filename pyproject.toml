@@ -26,7 +26,7 @@ dependencies = [
 
 # Packages à inclure dans la distribution
 [tool.setuptools]
-packages = ["core", "models"]
+packages = ["taxaname","core", "models"]
 
 # Crée la commande CLI `taxanames`
 [project.scripts]
