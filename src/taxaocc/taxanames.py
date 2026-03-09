@@ -15,7 +15,7 @@ import time
 # Third-party
 from PyQt5 import QtCore, QtGui, QtWidgets
 #print("Répertoire de travail actuel :", os.getcwd())
-from core import ressources  # noqa: F401
+from taxacore.core import ressources  # noqa: F401
 #import taxa_occ.core.ressources
 
 # Internal modules
