@@ -22,7 +22,7 @@ dependencies = [
 
 [project.scripts]
 # Quand on tape 'taxanames' dans le terminal, cela lance main() dans taxanames.py
-taxanames = "taxa_occ.taxanames:main"
+taxanames = "taxaocc.taxanames:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
