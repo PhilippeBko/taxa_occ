@@ -8,9 +8,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, pyqtSignal, QSortFilterProxyModel
 
 # Internal
-from core import functions
-from core.widgets import load_ui_from_resources
-from models.api_taxonomy import API_Taxonomy
+from taxaocc.core import functions
+from taxaocc.core.widgets import load_ui_from_resources
+from taxaocc.models.api_taxonomy import API_Taxonomy
 
 ########################################
 APIkey_tropicos = "afa96b37-3c48-4c1c-8bec-c844fb2b9c92"

@@ -5,7 +5,7 @@ import uuid
 from PyQt5 import  QtSql
 from PyQt5.QtCore import QFile, QTextStream
 
-from core import functions
+from taxaocc.core import functions
 
 
 class DatabaseConnection:
