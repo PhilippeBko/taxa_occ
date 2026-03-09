@@ -517,8 +517,16 @@ class MainWindowController:
         self.view.buttonbox_filter_reset.clicked.connect(self.button_filter_reset_click)
    #load themes menu
         button_themes_menu = QtWidgets.QMenu()
-        path_ui = os.path.join(os.path.dirname(__file__), "ui")
+
+        import taxaocc
+        package_dir = os.path.dirname(os.path.abspath(taxaocc.__file__))
+        path_ui = os.path.join(package_dir, "ui")
+        
+
+        #path_ui = os.path.join(os.path.dirname(__file__), "ui")
         menu_items = [os.path.splitext(f)[0] for f in os.listdir(path_ui) if f.endswith(".qss")]        
+
+
         for item in menu_items:
             action = QtWidgets.QAction(item, self.view)
             action.triggered.connect(lambda checked, item=item: self.on_menu_theme_click(item))
