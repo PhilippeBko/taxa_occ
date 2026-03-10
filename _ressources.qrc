@@ -27,6 +27,13 @@
   
   <file>sql/create_schema_taxonomy.sql</file>
   <file>sql/config_schema_taxonomy.sql</file>
+  
+  <file>ui/Adaptic.qss</file>
+  <file>ui/Combinear.qss</file>
+  <file>ui/Diffnes.qss</file>
+  <file>ui/Geoo.qss</file>
+  <file>ui/Lightstyle.qss</file>
+  <file>ui/Obit.qss</file>
 
   
  </qresource>

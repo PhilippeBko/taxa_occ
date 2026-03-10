@@ -1,7 +1,7 @@
 # ruff: noqa: E402
 
 #add icon.names in _icons.qrc then
-#pyrcc5 _ressources.qrc -o core/ressources.py
+#pyrcc5 _ressources.qrc -o src/taxaocc/core/ressources.py
 
 
 import os
@@ -517,15 +517,7 @@ class MainWindowController:
         self.view.buttonbox_filter_reset.clicked.connect(self.button_filter_reset_click)
    #load themes menu
         button_themes_menu = QtWidgets.QMenu()
-
-        import taxaocc
-        package_dir = os.path.dirname(os.path.abspath(taxaocc.__file__))
-        path_ui = os.path.join(package_dir, "ui")
-        
-
-        #path_ui = os.path.join(os.path.dirname(__file__), "ui")
-        menu_items = [os.path.splitext(f)[0] for f in os.listdir(path_ui) if f.endswith(".qss")]
-
+        menu_items = ["Adaptic", "Combinear", "Diffnes", "Geoo", "Lightstyle", "Obit"]
 
         for item in menu_items:
             action = QtWidgets.QAction(item, self.view)
@@ -565,15 +557,23 @@ class MainWindowController:
     def on_menu_theme_click(self, item):
     #to change the theme        
         try:
-            qss_file = functions.resource_path("ui", item + ".qss")
-            with open(qss_file, "r", encoding="utf-8") as f:
-                QtWidgets.qApp.setStyleSheet(f.read())
+            qss_path = f":/ui/{item}.qss"
+            file = QtCore.QFile(qss_path)
+            if not file.open(QtCore.QIODevice.ReadOnly | QtCore.QIODevice.Text):
+                raise RuntimeError(file.errorString())
+            stream = QtCore.QTextStream(file)
+            stylesheet = stream.readAll()
+            file.close()
+            QtWidgets.qApp.setStyleSheet(stylesheet)
+            # qss_file = functions.resource_path("ui", item + ".qss")
+            # with open(qss_file, "r", encoding="utf-8") as f:
+            #     QtWidgets.qApp.setStyleSheet(f.read())
             # save the theme in the config.ini via ConfigManager
             self.config_manager.theme = item
         except Exception as e:
-            if item:
-                msg = f"Unable to load the style: {item}"
-                MessageBox().critical_msgbox("Error", msg)
+            # if item:
+            #     msg = f"Unable to load the style: {item}"
+            #     MessageBox().critical_msgbox("Error", msg)
             item = None
         #set the theme to the theme button
         self.view.set_theme_text(item)        
