@@ -524,7 +524,7 @@ class MainWindowController:
         
 
         #path_ui = os.path.join(os.path.dirname(__file__), "ui")
-        menu_items = [os.path.splitext(f)[0] for f in os.listdir(path_ui) if f.endswith(".qss")]        
+        menu_items = [os.path.splitext(f)[0] for f in os.listdir(path_ui) if f.endswith(".qss")]
 
 
         for item in menu_items:
