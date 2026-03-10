@@ -5,13 +5,14 @@
 
 
 import os
+os.environ["QT_LOGGING_RULES"] = "qt.qpa.*=false"
+
 import sys
 
 # Standard library
 import json
 import re
 import time
-
 # Third-party
 from PyQt5 import QtCore, QtGui, QtWidgets
 #print("Répertoire de travail actuel :", os.getcwd())
@@ -555,6 +556,8 @@ class MainWindowController:
         self.trview_taxonref_setData()
 
     def on_menu_theme_click(self, item):
+        if item is None:
+            item = "Diffnes"
     #to change the theme        
         try:
             qss_path = f":/ui/{item}.qss"
