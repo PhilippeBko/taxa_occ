@@ -1,7 +1,7 @@
 # ruff: noqa: E402
 
 #add icon.names in _icons.qrc then
-#pyrcc5 _ressources.qrc -o src/taxaocc/core/ressources.py
+#pyrcc5 _ressources.qrc -o src/florica/core/ressources.py
 
 
 import os
@@ -739,7 +739,7 @@ class MainWindowController:
                 dict_tosave["id_taxonref"] = idtaxonref_torefresh
             else:
                 msg = db_postgres().postgres_error()
-                MessageBox().critical_msgbox("Error", msg)
+                MessageBox().information_msgbox("Error", msg, True)
         
         #refresh UI if updated (tlview_taxonref and trView_hierarchy)
         #if ls_item_updated:
@@ -895,7 +895,7 @@ class MainWindowController:
 
         if not db_taxa().db_update_properties (id_taxonref, _properties):
             msg = db_postgres().postgres_error()
-            MessageBox().critical_msgbox("Error", msg)
+            MessageBox().information_msgbox("Error", msg, True)
 
 
 
@@ -920,7 +920,7 @@ class MainWindowController:
         _data_list = None
         if base == "NOTCONNECTED":
             msg = "Error: no connection to the internet"
-            MessageBox().critical_msgbox("Connection error", msg)  
+            MessageBox().information_msgbox("Connection error", msg, True)  
             self.view.button_metadata_refresh.setEnabled(True)
             return
         elif base == "END":
@@ -1257,7 +1257,7 @@ class MainWindowController:
                         selecteditem.id_rank = save_idrank
                 else:
                     msg = db_postgres().postgres_error()
-                    MessageBox().critical_msgbox("Error", msg)
+                    MessageBox().information_msgbox("Error", msg, True)
 
 
                 # dict_tosave = {"id_taxonref":from_idtaxonref, "id_merge":idmerge, "category":category}
@@ -1360,7 +1360,7 @@ class MainWindowController:
             self.trview_names_setdata(selecteditem)
         else:
             msg = db_postgres().postgres_error()
-            MessageBox().critical_msgbox("Error", msg)
+            MessageBox().information_msgbox("Error", msg, True)
         
         self.refresh_ui_button_names()
 
@@ -1376,7 +1376,7 @@ class MainWindowController:
             self.refresh_ui_button_names()
         else:
             msg = db_postgres().postgres_error()
-            MessageBox().critical_msgbox("Error", msg)
+            MessageBox().information_msgbox("Error", msg, True)
         
     def apply_edit_synonym(self, synonym, category):
         # get the selectedItem
@@ -1390,7 +1390,7 @@ class MainWindowController:
             self.refresh_ui_button_names()
         else:
             msg = db_postgres().postgres_error()
-            MessageBox().critical_msgbox("Error", msg)
+            MessageBox().information_msgbox("Error", msg, True)
 
 
 

@@ -6,7 +6,7 @@ import configparser
 # Third-party
 from PyQt5 import QtGui, QtWidgets, uic
 from PyQt5.QtCore import Qt, pyqtSignal, QEvent, QFile
-from PyQt5.QtSql import QSqlDatabase
+from PyQt5.QtSql import QSqlDatabase,QSqlQuery
 
 
 
@@ -275,7 +275,7 @@ class MessageBox(QtWidgets.QMessageBox):
 
         # central icon
         main_icons = {
-            QtWidgets.QMessageBox.Icon.Information: QtGui.QIcon(":/icons/info.png"),
+            QtWidgets.QMessageBox.Icon.Information: QtGui.QIcon(":/icons/information.png"),
             QtWidgets.QMessageBox.Icon.Warning: QtGui.QIcon(":/icons/warning.png"),
             QtWidgets.QMessageBox.Icon.Critical: QtGui.QIcon(":/icons/critical.png"),
             QtWidgets.QMessageBox.Icon.Question: QtGui.QIcon(":/icons/question.png"),
@@ -304,11 +304,14 @@ class MessageBox(QtWidgets.QMessageBox):
 
         return msg.exec()
 
-    def critical_msgbox (self, title, msg):
+    def information_msgbox (self, title, msg, critical = False):
+        _icon = QtWidgets.QMessageBox.Icon.Information
+        if critical:
+            _icon=QtWidgets.QMessageBox.Icon.Critical
         self.custom_msgbox(
                 title,
-                msg,
-                icon=QtWidgets.QMessageBox.Icon.Critical,
+                msg,                
+                icon=_icon,
                 buttons=QtWidgets.QMessageBox.StandardButton.Ok
             )
         
@@ -456,58 +459,68 @@ class PostgresConfigDialog(QtWidgets.QDialog):
 
     # --------------------------------------------------
     def test_connection(self):
+        #firstly test for the postgres connexion with the generic postgres database
         host = self.ed_host.text().strip()
         user = self.ed_user.text().strip()
         password = self.ed_password.text()
         database = self.ed_database.text().strip()
         port = int(self.ed_port.text())
-
+        #check the minimum informations for testin connexion
         if not all([host, user, database]):
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Missing fields",
-                "Host, user and database are required."
-            )
+            MessageBox().information_msgbox ("Missing fields", "Host, user and database are required.")
             return
-
+        #create a temporary connexion
         conn_name = "test_connection"
-
-        # Cleanup any existing test connection
+        # Cleanup any potential existing test_connection
         if QSqlDatabase.contains(conn_name):
             db = QSqlDatabase.database(conn_name)
             if db.isOpen():
                 db.close()
             del db
             QSqlDatabase.removeDatabase(conn_name)
-
+        #test the connexion with the postgres database
         db = QSqlDatabase.addDatabase("QPSQL", conn_name)
         db.setHostName(host)
         db.setUserName(user)
         db.setPassword(password)
-        db.setDatabaseName(database)
+        db.setDatabaseName("postgres")
         db.setPort(port)
-
+        #return if errors in connexion, pursue if ok with the database name
+        connexion_ok = False
         if not db.open():
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Connection failed",
-                db.lastError().text()
-            )
-            self.btn_ok.setEnabled(False)
-            return
-
+            MessageBox().information_msgbox("Connection failed", db.lastError().text(), True)
+        else:
+            #the connexion is ok, check the database
+            connexion_ok = True
+            sql_query = f"SELECT 1 FROM pg_database WHERE datname='{database}';"
+            query = db.exec(sql_query)
+            #connexion is ok but the database does not exist
+            if not query.next():
+                #database does not exist, ask for creating
+                reply = MessageBox().question_msgbox ("Create the database ?", f"The base '{database}' does not exist, do you want to create it ?")
+                #analyse the reply            
+                if reply :
+                    #create the database
+                    sql_query = f"CREATE DATABASE {database};"
+                    if not db.exec(sql_query):
+                        MessageBox().information_msgbox("Creation failed", db.lastError().text(), True)
+                        connexion_ok = False
+                else:
+                    connexion_ok = False
         db.close()
         del db
         QSqlDatabase.removeDatabase(conn_name)
 
-        QtWidgets.QMessageBox.information(
-            self,
-            "Connection OK",
-            "Connection successful."
-        )
+        if connexion_ok:
+            MessageBox().information_msgbox("Connection OK", "Connection successful.")
+            # QtWidgets.QMessageBox.information(
+            #     self,
+            #     "Connection OK",
+            #     "Connection successful."
+            # )
 
-        self.validated = True
-        self.btn_ok.setEnabled(True)
+        self.validated = connexion_ok
+        self.btn_ok.setEnabled(connexion_ok)
 
     # --------------------------------------------------
     def accept_and_save(self):

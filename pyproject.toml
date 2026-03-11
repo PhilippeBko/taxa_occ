@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "florica"
 version = "0.1.0"
-description = "Mon application de taxonomie"
+description = "Software suite for managing botanical data"
 
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.gui-scripts]
-# Quand on tape 'taxanames' dans le terminal, cela lance main() dans taxanames.py
+# florica-nomen, to manage plant names
 florica-nomen = "florica.nomen.app:main"
 
 [tool.setuptools.packages.find]
