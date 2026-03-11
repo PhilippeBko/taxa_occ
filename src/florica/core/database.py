@@ -5,7 +5,7 @@ import uuid
 from PyQt5 import  QtSql
 from PyQt5.QtCore import QFile, QTextStream
 
-from taxaocc.core import functions
+from florica.core import functions
 
 
 class DatabaseConnection:

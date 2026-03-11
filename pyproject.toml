@@ -1,36 +1,31 @@
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.package-data]
-# Ceci dit à pip de copier tous les fichiers .qss et .ini dans le package taxaocc
-"taxaocc" = ["*.qss", "*.ini", "ui/*.qss", "core/*.ini"]
-
-
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "taxa_occ"
+name = "florica"
 version = "0.1.0"
 description = "Mon application de taxonomie"
-dependencies = [
-    "beautifulsoup4==4.14.3",
-    "certifi==2026.1.4",
-    "charset-normalizer==3.4.4",
-    "idna==3.11",
-    "PyQt5==5.15.11",
-    "PyQt5-Qt5==5.15.18",
-    "PyQt5_sip==12.18.0",
-    "requests==2.32.5",
-    "soupsieve==2.8.2",
-    "typing_extensions==4.15.0",
-    "urllib3==2.6.3",
+
+readme = "README.md"
+requires-python = ">=3.10"
+
+authors = [
+    {name = "Philippe Birnbaum"}
 ]
 
-[project.scripts]
+dependencies = [
+    "PyQt5>=5.15",
+    "requests>=2.32",
+    "beautifulsoup4>=4.12"
+]
+
+[project.gui-scripts]
 # Quand on tape 'taxanames' dans le terminal, cela lance main() dans taxanames.py
-taxanames = "taxaocc.taxanames:main"
+florica-nomen = "florica.nomen.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/..."

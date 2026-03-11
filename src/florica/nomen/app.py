@@ -16,19 +16,19 @@ import time
 # Third-party
 from PyQt5 import QtCore, QtGui, QtWidgets
 #print("Répertoire de travail actuel :", os.getcwd())
-from taxaocc.core import ressources  # noqa: F401
+from florica.core import ressources  # noqa: F401
 #import taxa_occ.core.ressources
 
 # Internal modules
-from taxaocc.core import functions
+from florica.core import functions
 
-from taxaocc.models.taxa_model import (
+from florica.models.taxa_model import (
     PNTaxa_searchAPI, PNTaxa_TreeModel, PNTaxa, PNTaxa_with_Score, 
     PNTaxa_QTreeView, PNTaxa_add, PNTaxa_edit, PNTaxa_merge,
     PNSynonym, PNSynonym_edit
 )
-from taxaocc.core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox, ConfigManager
-from taxaocc.core.database import DatabaseConnection, PN_dbTaxa
+from florica.core.widgets import PN_JsonQTreeView, LinkDelegate, PostgresConfigDialog, load_ui_from_resources, PN_DatabaseStatusWidget, MessageBox, ConfigManager
+from florica.core.database import DatabaseConnection, PN_dbTaxa
 
 #generic function to access to the dbases classes
 #access to the postgresql connexion

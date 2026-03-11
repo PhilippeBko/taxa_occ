@@ -2,14 +2,10 @@ Metadata-Version: 2.4
 Name: taxa_occ
 Version: 0.1.0
 Summary: Mon application de taxonomie
-Requires-Dist: beautifulsoup4==4.14.3
-Requires-Dist: certifi==2026.1.4
-Requires-Dist: charset-normalizer==3.4.4
-Requires-Dist: idna==3.11
-Requires-Dist: PyQt5==5.15.11
-Requires-Dist: PyQt5-Qt5==5.15.18
-Requires-Dist: PyQt5_sip==12.18.0
-Requires-Dist: requests==2.32.5
-Requires-Dist: soupsieve==2.8.2
-Requires-Dist: typing_extensions==4.15.0
-Requires-Dist: urllib3==2.6.3
+Author: Philippe Birnbaum
+Project-URL: Homepage, https://github.com/...
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: PyQt5>=5.15
+Requires-Dist: requests>=2.32
+Requires-Dist: beautifulsoup4>=4.12

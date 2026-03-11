@@ -1,2 +1,2 @@
-[console_scripts]
-taxanames = taxaocc.taxanames:main
+[gui_scripts]
+x-nomen = taxaocc.taxanames:main

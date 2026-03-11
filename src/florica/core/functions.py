@@ -3,12 +3,13 @@ import sys
 
 import re
 from datetime import datetime
-
-#BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
-#sys.path.insert(0, BASE_DIR)
+from pathlib import Path
+BASE_DIR = Path(os.path.dirname(os.path.abspath(sys.argv[0]))).parent
 
 def resource_path(*paths):
+
+    #t = Path(BASE_DIR).parent
+    #return os.path.join(t, *paths)
     return os.path.join(BASE_DIR, *paths)
 
 
